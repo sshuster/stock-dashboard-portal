@@ -117,3 +117,9 @@ export const availableStocks = [
   { symbol: "ADBE", name: "Adobe Inc." },
   { symbol: "CRM", name: "Salesforce, Inc." },
 ];
+
+// Add the missing exports that are needed by the api.ts file
+export const mockPortfolioSummary: PortfolioSummary = calculatePortfolioSummary(mockStocks);
+
+// Export mock stock history for API fallback
+export const mockStockHistory = mockStocks[0].history;
