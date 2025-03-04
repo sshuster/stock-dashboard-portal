@@ -36,14 +36,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<boolean> => {
-    // In a real app, this would be an API call
-    // For now, we'll use our mock data
+    // Always use frontend authentication for admin
+    // For other users, this would use the backend in a real app
     const { username, password } = credentials;
     
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 800));
     
-    // Mock authentication logic
+    // Authentication logic
     const foundUser = mockUsers.find(u => 
       u.username === username && u.password === password
     );
@@ -72,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 800));
     
-    // In a real app, this would create a new user
+    // In a real app, this would create a new user in the backend
     // For now, we'll just simulate and only allow registering non-existing usernames
     const { username, email, password, confirmPassword } = credentials;
     
@@ -109,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem("user");
+    localStorage.removeItem("adminStocks"); // Clear stocks when logging out
     navigate("/login");
     toast.info("Successfully logged out");
   };

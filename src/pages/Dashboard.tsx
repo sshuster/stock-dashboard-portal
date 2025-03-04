@@ -26,8 +26,23 @@ const Dashboard = () => {
     } else {
       // Load user stocks (using mock data for admin)
       if (user?.username === "admin") {
-        setStocks(mockStocks);
-        setNextId(mockStocks.length + 1);
+        const savedStocks = localStorage.getItem('adminStocks');
+        if (savedStocks) {
+          try {
+            const parsedStocks = JSON.parse(savedStocks) as StockWithHistory[];
+            setStocks(parsedStocks);
+            setNextId(Math.max(...parsedStocks.map(s => s.id), 0) + 1);
+          } catch (error) {
+            console.error('Failed to parse saved stocks:', error);
+            // Fallback to mock data
+            setStocks(mockStocks);
+            setNextId(mockStocks.length + 1);
+          }
+        } else {
+          // No saved stocks, use mock data
+          setStocks(mockStocks);
+          setNextId(mockStocks.length + 1);
+        }
       } else {
         // For non-admin users, we would fetch from backend
         // But for now, just initialize with empty array
@@ -36,6 +51,13 @@ const Dashboard = () => {
       }
     }
   }, [isAuthenticated, navigate, user]);
+
+  // Save admin stocks to localStorage whenever they change
+  useEffect(() => {
+    if (user?.username === "admin" && stocks.length > 0) {
+      localStorage.setItem('adminStocks', JSON.stringify(stocks));
+    }
+  }, [stocks, user]);
 
   useEffect(() => {
     if (stocks.length > 0 && !selectedStock) {
