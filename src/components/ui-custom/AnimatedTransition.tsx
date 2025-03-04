@@ -7,6 +7,8 @@ interface AnimatedTransitionProps {
   className?: string;
   animation?: "fade" | "scale" | "slide" | "blur";
   duration?: number;
+  delay?: number;
+  style?: React.CSSProperties;
 }
 
 const AnimatedTransition: React.FC<AnimatedTransitionProps> = ({
@@ -14,6 +16,8 @@ const AnimatedTransition: React.FC<AnimatedTransitionProps> = ({
   className,
   animation = "fade",
   duration = 300,
+  delay = 0,
+  style = {},
 }) => {
   const [isVisible, setIsVisible] = useState(false);
 
@@ -40,6 +44,12 @@ const AnimatedTransition: React.FC<AnimatedTransitionProps> = ({
     }
   };
 
+  const animationStyle = {
+    ...style,
+    animationDuration: `${duration}ms`,
+    animationDelay: delay ? `${delay}ms` : undefined,
+  };
+
   return (
     <div
       className={cn(
@@ -48,9 +58,7 @@ const AnimatedTransition: React.FC<AnimatedTransitionProps> = ({
         isVisible ? getAnimationClass() : "",
         className
       )}
-      style={{
-        animationDuration: `${duration}ms`,
-      }}
+      style={animationStyle}
     >
       {children}
     </div>

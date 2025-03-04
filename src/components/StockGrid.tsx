@@ -3,6 +3,7 @@ import { Stock } from "@/types";
 import { ArrowDown, ArrowUp, Trash } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AgGridReact } from "ag-grid-react";
+import { ColDef } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-alpine.css";
 import { Button } from "./ui/button";
@@ -75,51 +76,51 @@ const StockGrid: React.FC<StockGridProps> = ({ stocks, onRemoveStock }) => {
     );
   };
 
-  const columnDefs = [
+  const columnDefs: ColDef<Stock>[] = [
     { 
       headerName: "Symbol", 
-      field: "symbol", 
+      field: "symbol" as keyof Stock, 
       sortable: true, 
       filter: true,
       width: 100
     },
     { 
       headerName: "Name", 
-      field: "name", 
+      field: "name" as keyof Stock, 
       sortable: true, 
       filter: true,
       flex: 1 
     },
     { 
       headerName: "Price", 
-      field: "price", 
+      field: "price" as keyof Stock, 
       sortable: true, 
       valueFormatter: formatNumber,
       width: 120 
     },
     { 
       headerName: "Change", 
-      field: "change", 
+      field: "change" as keyof Stock, 
       sortable: true, 
       cellRenderer: changeRenderer,
       width: 120 
     },
     { 
       headerName: "Change %", 
-      field: "changePercent", 
+      field: "changePercent" as keyof Stock, 
       sortable: true, 
       cellRenderer: changePercentRenderer,
       width: 120 
     },
     { 
       headerName: "Quantity", 
-      field: "quantity", 
+      field: "quantity" as keyof Stock, 
       sortable: true, 
       width: 100 
     },
     { 
       headerName: "Avg. Cost", 
-      field: "purchasePrice", 
+      field: "purchasePrice" as keyof Stock, 
       sortable: true, 
       valueFormatter: formatNumber,
       width: 120 
