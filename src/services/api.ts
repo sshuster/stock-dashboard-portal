@@ -1,13 +1,13 @@
 
-import { LoginCredentials, RegisterCredentials, Stock, StockHistory, PortfolioSummary, User } from '@/types';
-import { mockPortfolioSummary, mockStocks, mockStockHistory } from '@/lib/mockData';
+import { LoginCredentials, RegisterCredentials, User, Match, Bet, BettingSummary } from '@/types';
+import { mockMatches, mockBets, calculateBettingSummary } from '@/lib/mockData';
 
 const API_URL = 'http://localhost:5000/api';
 
 // Helper to check if the backend is available
 const isBackendAvailable = async (): Promise<boolean> => {
   try {
-    const response = await fetch(`${API_URL}/stocks`, { method: 'HEAD' });
+    const response = await fetch(`${API_URL}/matches`, { method: 'HEAD' });
     return response.ok;
   } catch (error) {
     console.warn('Backend not available, using mock data');
@@ -53,7 +53,8 @@ export const loginUser = async (credentials: LoginCredentials): Promise<{ user: 
           id: 1,
           username: 'admin',
           email: 'admin@example.com',
-          isAdmin: true
+          isAdmin: true,
+          balance: 1000,
         };
         const mockToken = 'mock-token-123';
         return { user: mockUser, token: mockToken };
@@ -90,7 +91,8 @@ export const registerUser = async (credentials: RegisterCredentials): Promise<{ 
         id: Date.now(),
         username: credentials.username,
         email: credentials.email,
-        isAdmin: false
+        isAdmin: false,
+        balance: 500,
       };
       const mockToken = 'mock-token-' + Math.random().toString(36).substring(2);
       return { user: mockUser, token: mockToken };
@@ -115,86 +117,89 @@ export const registerUser = async (credentials: RegisterCredentials): Promise<{ 
   }
 };
 
-// Stock API calls
-export const getStocks = async (): Promise<Stock[]> => {
+// Matches API calls
+export const getMatches = async (): Promise<Match[]> => {
   try {
     const backendAvailable = await isBackendAvailable();
     
     if (!backendAvailable) {
-      return mockStocks;
+      return mockMatches;
     }
     
-    return authFetch(`${API_URL}/stocks`);
+    return authFetch(`${API_URL}/matches`);
   } catch (error) {
-    console.error('Error fetching stocks:', error);
-    return mockStocks; // Fallback to mock data
+    console.error('Error fetching matches:', error);
+    return mockMatches; // Fallback to mock data
   }
 };
 
-export const addStock = async (stock: Partial<Stock>): Promise<void> => {
+// Bets API calls
+export const getBets = async (): Promise<Bet[]> => {
   try {
     const backendAvailable = await isBackendAvailable();
     
     if (!backendAvailable) {
-      console.info('Backend not available, stock would be added if it was');
-      return;
+      // Return saved admin bets if available
+      const savedBets = localStorage.getItem('adminBets');
+      if (savedBets) {
+        try {
+          return JSON.parse(savedBets) as Bet[];
+        } catch (error) {
+          console.error('Failed to parse saved bets:', error);
+        }
+      }
+      return mockBets;
     }
     
-    await authFetch(`${API_URL}/stocks`, {
+    return authFetch(`${API_URL}/bets`);
+  } catch (error) {
+    console.error('Error fetching bets:', error);
+    return mockBets; // Fallback to mock data
+  }
+};
+
+export const placeBet = async (bet: Partial<Bet>): Promise<Bet> => {
+  try {
+    const backendAvailable = await isBackendAvailable();
+    
+    if (!backendAvailable) {
+      console.info('Backend not available, bet would be placed if it was');
+      // Return a mock bet for the frontend
+      return {
+        id: Date.now(),
+        matchId: bet.matchId!,
+        teamBetOn: bet.teamBetOn!,
+        odds: bet.odds!,
+        amount: bet.amount!,
+        potential: bet.potential!,
+        status: "pending",
+        dateCreated: new Date().toISOString()
+      };
+    }
+    
+    return await authFetch(`${API_URL}/bets`, {
       method: 'POST',
-      body: JSON.stringify(stock)
+      body: JSON.stringify(bet)
     });
   } catch (error) {
-    console.error('Error adding stock:', error);
+    console.error('Error placing bet:', error);
     throw error;
   }
 };
 
-export const deleteStock = async (stockId: number): Promise<void> => {
+export const getBettingSummary = async (): Promise<BettingSummary> => {
   try {
     const backendAvailable = await isBackendAvailable();
     
     if (!backendAvailable) {
-      console.info('Backend not available, stock would be deleted if it was');
-      return;
+      const bets = await getBets();
+      return calculateBettingSummary(bets);
     }
     
-    await authFetch(`${API_URL}/stocks/${stockId}`, {
-      method: 'DELETE'
-    });
+    return authFetch(`${API_URL}/betting/summary`);
   } catch (error) {
-    console.error('Error deleting stock:', error);
-    throw error;
-  }
-};
-
-export const getStockHistory = async (symbol: string): Promise<StockHistory[]> => {
-  try {
-    const backendAvailable = await isBackendAvailable();
-    
-    if (!backendAvailable) {
-      return mockStockHistory;
-    }
-    
-    return authFetch(`${API_URL}/stocks/${symbol}/history`);
-  } catch (error) {
-    console.error('Error fetching stock history:', error);
-    return mockStockHistory; // Fallback to mock data
-  }
-};
-
-export const getPortfolioSummary = async (): Promise<PortfolioSummary> => {
-  try {
-    const backendAvailable = await isBackendAvailable();
-    
-    if (!backendAvailable) {
-      return mockPortfolioSummary;
-    }
-    
-    return authFetch(`${API_URL}/portfolio/summary`);
-  } catch (error) {
-    console.error('Error fetching portfolio summary:', error);
-    return mockPortfolioSummary; // Fallback to mock data
+    console.error('Error fetching betting summary:', error);
+    return calculateBettingSummary(mockBets); // Fallback to mock data
   }
 };
 

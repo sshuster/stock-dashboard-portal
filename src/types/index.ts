@@ -55,3 +55,33 @@ export interface BettingSummary {
   netProfit: number;
   winRate: number;
 }
+
+// We need to remove all the outdated components,
+// but since they rely on these types, let's add them here temporarily
+// just to make TypeScript happy.
+export interface Stock {
+  id: number;
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  quantity: number;
+  purchasePrice: number;
+}
+
+export interface StockHistory {
+  date: string;
+  price: number;
+}
+
+export interface StockWithHistory extends Stock {
+  history: StockHistory[];
+}
+
+export interface PortfolioSummary {
+  totalValue: number;
+  totalGain: number;
+  totalGainPercent: number;
+  totalStocks: number;
+}
