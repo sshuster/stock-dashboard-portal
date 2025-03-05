@@ -16,7 +16,7 @@ app.config['SECRET_KEY'] = 'your-secret-key'  # Change this in production
 app.config['JWT_EXPIRATION_SECONDS'] = 86400  # 24 hours
 
 # Database setup
-DB_PATH = os.path.join(os.path.dirname(__file__), 'stock_portfolio.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), 'sports_betting.db')
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -29,30 +29,43 @@ def init_db():
         username TEXT UNIQUE NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        is_admin BOOLEAN DEFAULT 0
+        is_admin BOOLEAN DEFAULT 0,
+        balance REAL DEFAULT 1000.0
     )
     ''')
     
-    # Create stocks table
+    # Create matches table
     cursor.execute('''
-    CREATE TABLE IF NOT EXISTS stocks (
+    CREATE TABLE IF NOT EXISTS matches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        home_team TEXT NOT NULL,
+        away_team TEXT NOT NULL,
+        sport TEXT NOT NULL,
+        league TEXT NOT NULL,
+        start_time TEXT NOT NULL,
+        home_odds REAL NOT NULL,
+        away_odds REAL NOT NULL,
+        draw_odds REAL,
+        status TEXT NOT NULL,
+        home_score INTEGER,
+        away_score INTEGER
+    )
+    ''')
+    
+    # Create bets table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS bets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        symbol TEXT NOT NULL,
-        name TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        purchase_price REAL NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (id)
-    )
-    ''')
-    
-    # Create stock history table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS stock_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        symbol TEXT NOT NULL,
-        date TEXT NOT NULL,
-        price REAL NOT NULL
+        match_id INTEGER NOT NULL,
+        team_bet_on TEXT NOT NULL,
+        odds REAL NOT NULL,
+        amount REAL NOT NULL,
+        potential REAL NOT NULL,
+        status TEXT NOT NULL,
+        date_created TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (match_id) REFERENCES matches (id)
     )
     ''')
     
@@ -165,7 +178,8 @@ def register():
                 'id': user_id,
                 'username': username,
                 'email': email,
-                'isAdmin': False
+                'isAdmin': False,
+                'balance': 1000.0  # Default starting balance
             }
         }), 201
     except sqlite3.IntegrityError:
@@ -200,215 +214,363 @@ def login():
             'id': user['id'],
             'username': user['username'],
             'email': user['email'],
-            'isAdmin': bool(user['is_admin'])
+            'isAdmin': bool(user['is_admin']),
+            'balance': user['balance']
         }
     }), 200
 
-# Stock portfolio routes
-@app.route('/api/stocks', methods=['GET'])
-@token_required
-def get_stocks(current_user):
+# Match routes
+@app.route('/api/matches', methods=['GET'])
+def get_matches():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT s.id, s.symbol, s.name, s.quantity, s.purchase_price, 
-               (SELECT price FROM stock_history 
-                WHERE symbol = s.symbol 
-                ORDER BY date DESC LIMIT 1) as current_price
-        FROM stocks s
-        WHERE s.user_id = ?
-    """, (current_user['id'],))
+        SELECT * FROM matches
+        WHERE status = 'scheduled' OR status = 'live'
+        ORDER BY start_time
+    """)
     
-    stocks_db = cursor.fetchall()
+    matches_db = cursor.fetchall()
     conn.close()
     
-    stocks = []
-    for stock in stocks_db:
-        current_price = stock['current_price'] or 0  # Default to 0 if no price history
-        change = current_price - stock['purchase_price']
-        change_percent = (change / stock['purchase_price'] * 100) if stock['purchase_price'] > 0 else 0
-        
-        stocks.append({
-            'id': stock['id'],
-            'symbol': stock['symbol'],
-            'name': stock['name'],
-            'quantity': stock['quantity'],
-            'purchasePrice': stock['purchase_price'],
-            'price': current_price,
-            'change': change,
-            'changePercent': change_percent
+    matches = []
+    for match in matches_db:
+        matches.append({
+            'id': match['id'],
+            'homeTeam': match['home_team'],
+            'awayTeam': match['away_team'],
+            'sport': match['sport'],
+            'league': match['league'],
+            'startTime': match['start_time'],
+            'homeOdds': match['home_odds'],
+            'awayOdds': match['away_odds'],
+            'drawOdds': match['draw_odds'],
+            'status': match['status'],
+            'homeScore': match['home_score'],
+            'awayScore': match['away_score']
         })
     
-    return jsonify(stocks), 200
+    return jsonify(matches), 200
 
-@app.route('/api/stocks', methods=['POST'])
+@app.route('/api/matches/<int:match_id>', methods=['GET'])
+def get_match(match_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM matches WHERE id = ?", (match_id,))
+    
+    match = cursor.fetchone()
+    conn.close()
+    
+    if not match:
+        return jsonify({'message': 'Match not found'}), 404
+    
+    return jsonify({
+        'id': match['id'],
+        'homeTeam': match['home_team'],
+        'awayTeam': match['away_team'],
+        'sport': match['sport'],
+        'league': match['league'],
+        'startTime': match['start_time'],
+        'homeOdds': match['home_odds'],
+        'awayOdds': match['away_odds'],
+        'drawOdds': match['draw_odds'],
+        'status': match['status'],
+        'homeScore': match['home_score'],
+        'awayScore': match['away_score']
+    }), 200
+
+@app.route('/api/matches/live', methods=['GET'])
+def get_live_matches():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM matches WHERE status = 'live' ORDER BY start_time")
+    
+    matches_db = cursor.fetchall()
+    conn.close()
+    
+    matches = []
+    for match in matches_db:
+        matches.append({
+            'id': match['id'],
+            'homeTeam': match['home_team'],
+            'awayTeam': match['away_team'],
+            'sport': match['sport'],
+            'league': match['league'],
+            'startTime': match['start_time'],
+            'homeOdds': match['home_odds'],
+            'awayOdds': match['away_odds'],
+            'drawOdds': match['draw_odds'],
+            'status': match['status'],
+            'homeScore': match['home_score'],
+            'awayScore': match['away_score']
+        })
+    
+    return jsonify(matches), 200
+
+# Betting routes
+@app.route('/api/bets', methods=['GET'])
 @token_required
-def add_stock(current_user):
+def get_user_bets(current_user):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT b.*, m.home_team, m.away_team 
+        FROM bets b
+        JOIN matches m ON b.match_id = m.id
+        WHERE b.user_id = ?
+        ORDER BY b.date_created DESC
+    """, (current_user['id'],))
+    
+    bets_db = cursor.fetchall()
+    conn.close()
+    
+    bets = []
+    for bet in bets_db:
+        bets.append({
+            'id': bet['id'],
+            'matchId': bet['match_id'],
+            'teamBetOn': bet['team_bet_on'],
+            'odds': bet['odds'],
+            'amount': bet['amount'],
+            'potential': bet['potential'],
+            'status': bet['status'],
+            'dateCreated': bet['date_created'],
+            'homeTeam': bet['home_team'],
+            'awayTeam': bet['away_team']
+        })
+    
+    return jsonify(bets), 200
+
+@app.route('/api/bets', methods=['POST'])
+@token_required
+def place_bet(current_user):
     data = request.get_json()
     
-    symbol = data.get('symbol')
-    name = data.get('name')
-    quantity = data.get('quantity')
-    purchase_price = data.get('purchasePrice')
+    match_id = data.get('matchId')
+    team_bet_on = data.get('teamBetOn')
+    odds = data.get('odds')
+    amount = data.get('amount')
     
-    if not symbol or not name or not quantity or not purchase_price:
+    if not match_id or not team_bet_on or not odds or not amount:
         return jsonify({'message': 'Missing required fields'}), 400
         
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Check if the stock already exists for this user
-    cursor.execute(
-        "SELECT * FROM stocks WHERE user_id = ? AND symbol = ?",
-        (current_user['id'], symbol)
-    )
-    existing_stock = cursor.fetchone()
-    
-    if existing_stock:
-        # Update existing stock quantity and average down the purchase price
-        new_quantity = existing_stock['quantity'] + quantity
-        new_purchase_price = ((existing_stock['quantity'] * existing_stock['purchase_price']) + 
-                             (quantity * purchase_price)) / new_quantity
-        
-        cursor.execute(
-            "UPDATE stocks SET quantity = ?, purchase_price = ? WHERE id = ?",
-            (new_quantity, new_purchase_price, existing_stock['id'])
-        )
-    else:
-        # Add new stock
-        cursor.execute(
-            "INSERT INTO stocks (user_id, symbol, name, quantity, purchase_price) VALUES (?, ?, ?, ?, ?)",
-            (current_user['id'], symbol, name, quantity, purchase_price)
-        )
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'message': 'Stock added successfully'}), 201
-
-@app.route('/api/stocks/<int:stock_id>', methods=['DELETE'])
-@token_required
-def delete_stock(current_user, stock_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Check if the stock belongs to the current user
-    cursor.execute(
-        "SELECT * FROM stocks WHERE id = ? AND user_id = ?",
-        (stock_id, current_user['id'])
-    )
-    stock = cursor.fetchone()
-    
-    if not stock:
+    # Check if user has enough balance
+    if current_user['balance'] < amount:
         conn.close()
-        return jsonify({'message': 'Stock not found or not authorized'}), 404
+        return jsonify({'message': 'Insufficient balance'}), 400
         
-    cursor.execute("DELETE FROM stocks WHERE id = ?", (stock_id,))
-    conn.commit()
-    conn.close()
+    # Check if match exists and is not completed
+    cursor.execute("SELECT * FROM matches WHERE id = ? AND status != 'completed'", (match_id,))
+    match = cursor.fetchone()
     
-    return jsonify({'message': 'Stock deleted successfully'}), 200
+    if not match:
+        conn.close()
+        return jsonify({'message': 'Match not found or already completed'}), 404
+        
+    # Calculate potential winnings
+    potential = amount * odds
+    
+    try:
+        # Update user balance
+        new_balance = current_user['balance'] - amount
+        cursor.execute("UPDATE users SET balance = ? WHERE id = ?", (new_balance, current_user['id']))
+        
+        # Create new bet
+        cursor.execute(
+            """INSERT INTO bets 
+               (user_id, match_id, team_bet_on, odds, amount, potential, status, date_created) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (current_user['id'], match_id, team_bet_on, odds, amount, potential, 'pending', datetime.now().isoformat())
+        )
+        
+        conn.commit()
+        
+        # Get the new bet's ID
+        cursor.execute("SELECT last_insert_rowid()")
+        bet_id = cursor.fetchone()[0]
+        
+        return jsonify({
+            'message': 'Bet placed successfully',
+            'bet': {
+                'id': bet_id,
+                'matchId': match_id,
+                'teamBetOn': team_bet_on,
+                'odds': odds,
+                'amount': amount,
+                'potential': potential,
+                'status': 'pending',
+                'dateCreated': datetime.now().isoformat()
+            },
+            'newBalance': new_balance
+        }), 201
+    finally:
+        conn.close()
 
-@app.route('/api/stocks/<string:symbol>/history', methods=['GET'])
+@app.route('/api/bets/history', methods=['GET'])
 @token_required
-def get_stock_history(current_user, symbol):
+def get_bet_history(current_user):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT date, price FROM stock_history WHERE symbol = ? ORDER BY date",
-        (symbol,)
-    )
-    
-    history_db = cursor.fetchall()
-    conn.close()
-    
-    history = [{'date': item['date'], 'price': item['price']} for item in history_db]
-    
-    return jsonify(history), 200
-
-@app.route('/api/portfolio/summary', methods=['GET'])
-@token_required
-def get_portfolio_summary(current_user):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
     cursor.execute("""
-        SELECT 
-            COUNT(*) as total_stocks,
-            SUM(s.quantity * s.purchase_price) as total_investment,
-            SUM(s.quantity * COALESCE(
-                (SELECT price FROM stock_history 
-                WHERE symbol = s.symbol 
-                ORDER BY date DESC LIMIT 1), 
-                s.purchase_price)
-            ) as total_current_value
-        FROM stocks s
-        WHERE s.user_id = ?
+        SELECT b.*, m.home_team, m.away_team 
+        FROM bets b
+        JOIN matches m ON b.match_id = m.id
+        WHERE b.user_id = ?
+        ORDER BY b.date_created DESC
     """, (current_user['id'],))
     
-    summary = cursor.fetchone()
+    bets_db = cursor.fetchall()
     conn.close()
     
-    total_investment = summary['total_investment'] or 0
-    total_current_value = summary['total_current_value'] or 0
-    total_gain = total_current_value - total_investment
-    total_gain_percent = (total_gain / total_investment * 100) if total_investment > 0 else 0
+    bets = []
+    for bet in bets_db:
+        bets.append({
+            'id': bet['id'],
+            'matchId': bet['match_id'],
+            'teamBetOn': bet['team_bet_on'],
+            'odds': bet['odds'],
+            'amount': bet['amount'],
+            'potential': bet['potential'],
+            'status': bet['status'],
+            'dateCreated': bet['date_created'],
+            'homeTeam': bet['home_team'],
+            'awayTeam': bet['away_team']
+        })
+    
+    return jsonify(bets), 200
+
+@app.route('/api/betting/summary', methods=['GET'])
+@token_required
+def get_betting_summary(current_user):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get total number of bets
+    cursor.execute("SELECT COUNT(*) as total FROM bets WHERE user_id = ?", (current_user['id'],))
+    total_bets = cursor.fetchone()['total']
+    
+    # Get number of pending bets
+    cursor.execute("SELECT COUNT(*) as pending FROM bets WHERE user_id = ? AND status = 'pending'", (current_user['id'],))
+    pending_bets = cursor.fetchone()['pending']
+    
+    # Get total amount wagered
+    cursor.execute("SELECT SUM(amount) as total_wagered FROM bets WHERE user_id = ?", (current_user['id'],))
+    total_wagered = cursor.fetchone()['total_wagered'] or 0
+    
+    # Get total amount won
+    cursor.execute("SELECT SUM(potential) as total_won FROM bets WHERE user_id = ? AND status = 'won'", (current_user['id'],))
+    total_won = cursor.fetchone()['total_won'] or 0
+    
+    # Get number of won bets
+    cursor.execute("SELECT COUNT(*) as won FROM bets WHERE user_id = ? AND status = 'won'", (current_user['id'],))
+    won_bets = cursor.fetchone()['won']
+    
+    conn.close()
+    
+    # Calculate net profit
+    net_profit = total_won - total_wagered
+    
+    # Calculate win rate
+    win_rate = (won_bets / total_bets * 100) if total_bets > 0 else 0
     
     return jsonify({
-        'totalStocks': summary['total_stocks'],
-        'totalValue': total_current_value,
-        'totalGain': total_gain,
-        'totalGainPercent': total_gain_percent
+        'totalBets': total_bets,
+        'pendingBets': pending_bets,
+        'totalWagered': total_wagered,
+        'totalWon': total_won,
+        'netProfit': net_profit,
+        'winRate': win_rate
     }), 200
 
-# Generate mock stock data
+# Generate mock match data
 @app.route('/api/mock/generate', methods=['GET'])
 def generate_mock_data():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Clear existing history data
-    cursor.execute("DELETE FROM stock_history")
+    # Clear existing match data
+    cursor.execute("DELETE FROM matches")
     
-    # Sample stock symbols
-    symbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'BAC', 'WMT']
+    # Sample sports and leagues
+    sports_leagues = {
+        'football': ['NFL', 'NCAA'],
+        'basketball': ['NBA', 'NCAA'],
+        'baseball': ['MLB'],
+        'hockey': ['NHL'],
+        'soccer': ['Premier League', 'La Liga', 'MLS']
+    }
     
-    # Generate 30 days of history for each symbol
-    today = datetime.now()
+    # Sample team names
+    teams = {
+        'football': {
+            'NFL': ['Chiefs', 'Eagles', 'Bills', '49ers', 'Cowboys', 'Ravens', 'Bengals', 'Lions'],
+            'NCAA': ['Alabama', 'Georgia', 'Ohio State', 'Michigan', 'Texas', 'Oregon', 'Florida State', 'Penn State']
+        },
+        'basketball': {
+            'NBA': ['Celtics', 'Nuggets', 'Bucks', 'Timberwolves', 'Lakers', 'Knicks', 'Thunder', 'Heat'],
+            'NCAA': ['UConn', 'Purdue', 'Houston', 'Tennessee', 'Arizona', 'Kansas', 'Duke', 'North Carolina']
+        },
+        'baseball': {
+            'MLB': ['Dodgers', 'Yankees', 'Braves', 'Phillies', 'Astros', 'Orioles', 'Rangers', 'Rays']
+        },
+        'hockey': {
+            'NHL': ['Bruins', 'Panthers', 'Rangers', 'Stars', 'Oilers', 'Hurricanes', 'Golden Knights', 'Avalanche']
+        },
+        'soccer': {
+            'Premier League': ['Man City', 'Arsenal', 'Liverpool', 'Man United', 'Chelsea', 'Newcastle', 'Tottenham', 'Brighton'],
+            'La Liga': ['Real Madrid', 'Barcelona', 'Atletico Madrid', 'Athletic Bilbao', 'Girona', 'Real Sociedad', 'Valencia', 'Villarreal'],
+            'MLS': ['Inter Miami', 'Cincinnati', 'Columbus', 'Orlando', 'LAFC', 'Seattle', 'Atlanta', 'LA Galaxy']
+        }
+    }
     
-    for symbol in symbols:
-        base_price = {
-            'AAPL': 150.0,
-            'MSFT': 300.0,
-            'GOOGL': 130.0,
-            'AMZN': 140.0,
-            'META': 310.0,
-            'TSLA': 240.0,
-            'NVDA': 450.0,
-            'JPM': 170.0,
-            'BAC': 35.0,
-            'WMT': 60.0
-        }.get(symbol, 100.0)
-        
-        # Generate 30 days of price history with some randomness
-        import random
-        volatility = 0.02  # 2% daily volatility
-        
-        for i in range(30):
-            date = (today - timedelta(days=29-i)).strftime('%Y-%m-%d')
-            # Random daily change with some momentum
-            change = random.normalvariate(0, volatility)
-            base_price *= (1 + change)
+    # Generate matches for each sport and league
+    import random
+    from datetime import timedelta
+    
+    match_id = 1
+    
+    for sport, leagues in sports_leagues.items():
+        for league in leagues:
+            league_teams = teams[sport][league]
+            teams_copy = league_teams.copy()
             
-            cursor.execute(
-                "INSERT INTO stock_history (symbol, date, price) VALUES (?, ?, ?)",
-                (symbol, date, round(base_price, 2))
-            )
+            # Create matchups
+            for _ in range(4):  # 4 matches per league
+                if len(teams_copy) < 2:
+                    teams_copy = league_teams.copy()
+                
+                # Select two teams
+                home_team = random.choice(teams_copy)
+                teams_copy.remove(home_team)
+                away_team = random.choice(teams_copy)
+                teams_copy.remove(away_team)
+                
+                # Generate random start time (between now and 7 days from now)
+                hours_offset = random.randint(1, 7 * 24)
+                start_time = (datetime.now() + timedelta(hours=hours_offset)).isoformat()
+                
+                # Generate random odds
+                home_odds = round(random.uniform(1.5, 4.0), 2)
+                away_odds = round(random.uniform(1.5, 4.0), 2)
+                draw_odds = round(random.uniform(3.0, 8.0), 2) if sport == 'soccer' else None
+                
+                # Insert match into database
+                cursor.execute(
+                    """INSERT INTO matches 
+                       (id, home_team, away_team, sport, league, start_time, home_odds, away_odds, draw_odds, status) 
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (match_id, home_team, away_team, sport, league, start_time, home_odds, away_odds, draw_odds, 'scheduled')
+                )
+                
+                match_id += 1
     
     conn.commit()
     conn.close()
     
-    return jsonify({'message': 'Mock data generated successfully'}), 200
+    return jsonify({'message': 'Mock match data generated successfully'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
