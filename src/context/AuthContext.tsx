@@ -36,6 +36,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<boolean> => {
+    // Check for admin credentials first
+    if (credentials.username === 'admin' && credentials.password === 'admin') {
+      // Create admin user
+      const adminUser: User = {
+        id: 0,
+        username: 'admin',
+        email: 'admin@example.com',
+        isAdmin: true,
+        companyName: 'Admin Organization',
+        industry: 'Technology',
+        balance: 10000, // Give admin a starting balance
+      };
+      
+      // Set user in local storage and state
+      localStorage.setItem("user", JSON.stringify(adminUser));
+      localStorage.setItem("token", "admin-token"); // Dummy token
+      
+      setUser(adminUser);
+      setIsAuthenticated(true);
+      
+      toast.success(`Welcome back, ${adminUser.username}!`);
+      return true;
+    }
+    
+    // If not admin, proceed with regular login
     try {
       const response = await fetch('http://localhost:5000/api/login', {
         method: 'POST',
