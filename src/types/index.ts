@@ -4,6 +4,7 @@ export interface User {
   username: string;
   email: string;
   isAdmin: boolean;
+  balance?: number;
 }
 
 export interface LoginCredentials {
@@ -16,29 +17,41 @@ export interface RegisterCredentials extends LoginCredentials {
   confirmPassword: string;
 }
 
-export interface Stock {
+export interface Bet {
   id: number;
-  symbol: string;
-  name: string;
-  price: number;
-  change: number;
-  changePercent: number;
-  quantity: number;
-  purchasePrice: number;
+  matchId: number;
+  teamBetOn: string;
+  odds: number;
+  amount: number;
+  potential: number;
+  status: "pending" | "won" | "lost";
+  dateCreated: string;
 }
 
-export interface StockHistory {
-  date: string;
-  price: number;
+export interface Match {
+  id: number;
+  homeTeam: string;
+  awayTeam: string;
+  sport: "football" | "basketball" | "baseball" | "hockey" | "soccer";
+  league: string;
+  startTime: string;
+  homeOdds: number;
+  awayOdds: number;
+  drawOdds?: number;
+  status: "scheduled" | "live" | "completed";
+  homeScore?: number;
+  awayScore?: number;
 }
 
-export interface StockWithHistory extends Stock {
-  history: StockHistory[];
+export interface MatchWithBets extends Match {
+  userBets?: Bet[];
 }
 
-export interface PortfolioSummary {
-  totalValue: number;
-  totalGain: number;
-  totalGainPercent: number;
-  totalStocks: number;
+export interface BettingSummary {
+  totalBets: number;
+  pendingBets: number;
+  totalWagered: number;
+  totalWon: number;
+  netProfit: number;
+  winRate: number;
 }

@@ -1,5 +1,5 @@
 
-import { PortfolioSummary, Stock, StockWithHistory, User } from "@/types";
+import { Bet, BettingSummary, Match, MatchWithBets, User } from "@/types";
 
 // Mock user data
 export const mockUsers = [
@@ -9,117 +9,152 @@ export const mockUsers = [
     email: "admin@example.com",
     password: "admin",
     isAdmin: true,
+    balance: 1000,
   },
 ];
 
-// Mock stock data
-export const mockStocks: StockWithHistory[] = [
+// Generate date for upcoming matches
+function getUpcomingDate(daysFromNow: number, hoursFromNow = 0): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromNow);
+  date.setHours(date.getHours() + hoursFromNow);
+  return date.toISOString();
+}
+
+// Mock matches data
+export const mockMatches: MatchWithBets[] = [
   {
     id: 1,
-    symbol: "AAPL",
-    name: "Apple Inc.",
-    price: 172.50,
-    change: 2.35,
-    changePercent: 1.38,
-    quantity: 10,
-    purchasePrice: 150.25,
-    history: generateRandomHistory(30, 150, 180),
+    homeTeam: "New York Jets",
+    awayTeam: "Buffalo Bills",
+    sport: "football",
+    league: "NFL",
+    startTime: getUpcomingDate(1, 4),
+    homeOdds: 2.5,
+    awayOdds: 1.65,
+    status: "scheduled",
   },
   {
     id: 2,
-    symbol: "MSFT",
-    name: "Microsoft Corporation",
-    price: 328.79,
-    change: -1.21,
-    changePercent: -0.37,
-    quantity: 5,
-    purchasePrice: 290.50,
-    history: generateRandomHistory(30, 290, 330),
+    homeTeam: "Los Angeles Lakers",
+    awayTeam: "Golden State Warriors",
+    sport: "basketball",
+    league: "NBA",
+    startTime: getUpcomingDate(0, 3),
+    homeOdds: 1.9,
+    awayOdds: 2.1,
+    status: "scheduled",
   },
   {
     id: 3,
-    symbol: "GOOGL",
-    name: "Alphabet Inc.",
-    price: 134.99,
-    change: 0.87,
-    changePercent: 0.65,
-    quantity: 8,
-    purchasePrice: 125.30,
-    history: generateRandomHistory(30, 120, 140),
+    homeTeam: "Manchester United",
+    awayTeam: "Liverpool",
+    sport: "soccer",
+    league: "Premier League",
+    startTime: getUpcomingDate(2),
+    homeOdds: 3.1,
+    awayOdds: 2.4,
+    drawOdds: 3.3,
+    status: "scheduled",
   },
   {
     id: 4,
-    symbol: "AMZN",
-    name: "Amazon.com Inc.",
-    price: 143.56,
-    change: 1.05,
-    changePercent: 0.74,
-    quantity: 12,
-    purchasePrice: 130.45,
-    history: generateRandomHistory(30, 125, 145),
+    homeTeam: "New York Yankees",
+    awayTeam: "Boston Red Sox",
+    sport: "baseball",
+    league: "MLB",
+    startTime: getUpcomingDate(1, 6),
+    homeOdds: 1.75,
+    awayOdds: 2.25,
+    status: "scheduled",
   },
   {
     id: 5,
-    symbol: "TSLA",
-    name: "Tesla, Inc.",
-    price: 177.80,
-    change: -5.20,
-    changePercent: -2.84,
-    quantity: 15,
-    purchasePrice: 200.10,
-    history: generateRandomHistory(30, 170, 210),
+    homeTeam: "Tampa Bay Lightning",
+    awayTeam: "Florida Panthers",
+    sport: "hockey",
+    league: "NHL",
+    startTime: getUpcomingDate(3, 2),
+    homeOdds: 2.15,
+    awayOdds: 1.85,
+    status: "scheduled",
   },
 ];
 
-// Generate random history data
-function generateRandomHistory(days: number, min: number, max: number): { date: string; price: number }[] {
-  const history = [];
-  const today = new Date();
-  
-  for (let i = days; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(today.getDate() - i);
-    
-    history.push({
-      date: date.toISOString().split('T')[0],
-      price: parseFloat((min + Math.random() * (max - min)).toFixed(2)),
-    });
-  }
-  
-  return history;
-}
+// Mock bets data
+export const mockBets: Bet[] = [
+  {
+    id: 1,
+    matchId: 2,
+    teamBetOn: "Los Angeles Lakers",
+    odds: 1.9,
+    amount: 50,
+    potential: 95,
+    status: "pending",
+    dateCreated: new Date().toISOString(),
+  },
+  {
+    id: 2,
+    matchId: 3,
+    teamBetOn: "Liverpool",
+    odds: 2.4,
+    amount: 100,
+    potential: 240,
+    status: "pending",
+    dateCreated: new Date().toISOString(),
+  },
+  {
+    id: 3,
+    matchId: 1,
+    teamBetOn: "Buffalo Bills",
+    odds: 1.65,
+    amount: 75,
+    potential: 123.75,
+    status: "won",
+    dateCreated: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
+  },
+];
 
-// Calculate portfolio summary
-export function calculatePortfolioSummary(stocks: Stock[]): PortfolioSummary {
-  const totalValue = stocks.reduce((sum, stock) => sum + stock.price * stock.quantity, 0);
-  const totalCost = stocks.reduce((sum, stock) => sum + stock.purchasePrice * stock.quantity, 0);
-  const totalGain = totalValue - totalCost;
-  const totalGainPercent = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
+// Calculate betting summary
+export function calculateBettingSummary(bets: Bet[]): BettingSummary {
+  const totalBets = bets.length;
+  const pendingBets = bets.filter(bet => bet.status === "pending").length;
+  const totalWagered = bets.reduce((sum, bet) => sum + bet.amount, 0);
+  const wonBets = bets.filter(bet => bet.status === "won");
+  const totalWon = wonBets.reduce((sum, bet) => sum + bet.potential, 0);
+  const netProfit = totalWon - totalWagered;
+  const completedBets = bets.filter(bet => bet.status !== "pending").length;
+  const winRate = completedBets > 0 ? (wonBets.length / completedBets) * 100 : 0;
   
   return {
-    totalValue,
-    totalGain,
-    totalGainPercent,
-    totalStocks: stocks.length,
+    totalBets,
+    pendingBets,
+    totalWagered,
+    totalWon,
+    netProfit,
+    winRate,
   };
 }
 
-// Available stock symbols for adding to portfolio
-export const availableStocks = [
-  { symbol: "NFLX", name: "Netflix, Inc." },
-  { symbol: "META", name: "Meta Platforms, Inc." },
-  { symbol: "NVDA", name: "NVIDIA Corporation" },
-  { symbol: "JPM", name: "JPMorgan Chase & Co." },
-  { symbol: "DIS", name: "The Walt Disney Company" },
-  { symbol: "V", name: "Visa Inc." },
-  { symbol: "PG", name: "Procter & Gamble Co." },
-  { symbol: "KO", name: "The Coca-Cola Company" },
-  { symbol: "ADBE", name: "Adobe Inc." },
-  { symbol: "CRM", name: "Salesforce, Inc." },
+// Available sports leagues for filters
+export const availableSports = [
+  { value: "football", label: "Football" },
+  { value: "basketball", label: "Basketball" },
+  { value: "baseball", label: "Baseball" },
+  { value: "hockey", label: "Hockey" },
+  { value: "soccer", label: "Soccer" },
 ];
 
-// Add the missing exports that are needed by the api.ts file
-export const mockPortfolioSummary: PortfolioSummary = calculatePortfolioSummary(mockStocks);
+export const availableLeagues = [
+  { value: "NFL", label: "NFL" },
+  { value: "NBA", label: "NBA" },
+  { value: "MLB", label: "MLB" },
+  { value: "NHL", label: "NHL" },
+  { value: "Premier League", label: "Premier League" },
+  { value: "La Liga", label: "La Liga" },
+  { value: "Bundesliga", label: "Bundesliga" },
+  { value: "Serie A", label: "Serie A" },
+];
 
-// Export mock stock history for API fallback
-export const mockStockHistory = mockStocks[0].history;
+// Mock betting summary for API fallback
+export const mockBettingSummary: BettingSummary = calculateBettingSummary(mockBets);

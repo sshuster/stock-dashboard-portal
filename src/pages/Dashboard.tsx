@@ -1,135 +1,99 @@
 
-import AddStockForm from "@/components/AddStockForm";
 import AnimatedTransition from "@/components/ui-custom/AnimatedTransition";
-import DashboardStats from "@/components/DashboardStats";
+import BetHistory from "@/components/BetHistory";
+import BettingStats from "@/components/BettingStats";
 import GlassCard from "@/components/ui-custom/GlassCard";
 import Header from "@/components/Header";
-import StockChart from "@/components/StockChart";
-import StockGrid from "@/components/StockGrid";
+import MatchGrid from "@/components/MatchGrid";
 import { useAuth } from "@/context/AuthContext";
-import { calculatePortfolioSummary, mockStocks } from "@/lib/mockData";
-import { Stock, StockWithHistory } from "@/types";
+import { calculateBettingSummary, mockBets, mockMatches } from "@/lib/mockData";
+import { Bet, MatchWithBets } from "@/types";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DollarSign } from "lucide-react";
 
 const Dashboard = () => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, updateBalance } = useAuth();
   const navigate = useNavigate();
-  const [stocks, setStocks] = useState<StockWithHistory[]>([]);
-  const [selectedStock, setSelectedStock] = useState<StockWithHistory | null>(null);
+  const [matches, setMatches] = useState<MatchWithBets[]>([]);
+  const [bets, setBets] = useState<Bet[]>([]);
   const [nextId, setNextId] = useState(0);
 
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login");
     } else {
-      // Load user stocks (using mock data for admin)
+      // Load user matches and bets
       if (user?.username === "admin") {
-        const savedStocks = localStorage.getItem('adminStocks');
-        if (savedStocks) {
+        const savedBets = localStorage.getItem('adminBets');
+        if (savedBets) {
           try {
-            const parsedStocks = JSON.parse(savedStocks) as StockWithHistory[];
-            setStocks(parsedStocks);
-            setNextId(Math.max(...parsedStocks.map(s => s.id), 0) + 1);
+            const parsedBets = JSON.parse(savedBets) as Bet[];
+            setBets(parsedBets);
+            setNextId(Math.max(...parsedBets.map(b => b.id), 0) + 1);
           } catch (error) {
-            console.error('Failed to parse saved stocks:', error);
+            console.error('Failed to parse saved bets:', error);
             // Fallback to mock data
-            setStocks(mockStocks);
-            setNextId(mockStocks.length + 1);
+            setBets(mockBets);
+            setNextId(mockBets.length + 1);
           }
         } else {
-          // No saved stocks, use mock data
-          setStocks(mockStocks);
-          setNextId(mockStocks.length + 1);
+          // No saved bets, use mock data
+          setBets(mockBets);
+          setNextId(mockBets.length + 1);
         }
+        
+        // Always use mock matches for demo
+        setMatches(mockMatches);
       } else {
-        // For non-admin users, we would fetch from backend
-        // But for now, just initialize with empty array
-        setStocks([]);
+        // For non-admin users, use empty state or connect to backend
+        setBets([]);
+        setMatches(mockMatches);
         setNextId(1);
       }
     }
   }, [isAuthenticated, navigate, user]);
 
-  // Save admin stocks to localStorage whenever they change
+  // Save admin bets to localStorage whenever they change
   useEffect(() => {
-    if (user?.username === "admin" && stocks.length > 0) {
-      localStorage.setItem('adminStocks', JSON.stringify(stocks));
+    if (user?.username === "admin" && bets.length > 0) {
+      localStorage.setItem('adminBets', JSON.stringify(bets));
     }
-  }, [stocks, user]);
+  }, [bets, user]);
 
-  useEffect(() => {
-    if (stocks.length > 0 && !selectedStock) {
-      setSelectedStock(stocks[0]);
-    }
-  }, [stocks, selectedStock]);
-
-  const handleAddStock = (symbol: string, quantity: number, purchasePrice: number) => {
-    // In a real app, this would be an API call to add the stock
-    const selectedAvailableStock = mockStocks.find(s => s.symbol === symbol);
+  const handlePlaceBet = (matchId: number, team: string, odds: number, amount: number) => {
+    const match = matches.find(m => m.id === matchId);
     
-    if (!selectedAvailableStock) {
-      toast.error("Stock not found");
+    if (!match) {
+      toast.error("Match not found");
       return;
     }
     
-    // Check if stock already exists in portfolio
-    const existingStock = stocks.find(s => s.symbol === symbol);
+    // Calculate potential winnings
+    const potential = amount * odds;
     
-    if (existingStock) {
-      // Update existing stock quantity
-      const updatedStocks = stocks.map(stock => 
-        stock.symbol === symbol 
-          ? { 
-              ...stock, 
-              quantity: stock.quantity + quantity,
-              // Recalculate average purchase price
-              purchasePrice: ((stock.purchasePrice * stock.quantity) + (purchasePrice * quantity)) / (stock.quantity + quantity)
-            } 
-          : stock
-      );
-      
-      setStocks(updatedStocks);
-      toast.success(`Added ${quantity} more shares of ${symbol}`);
-    } else {
-      // Add new stock
-      const newStock: StockWithHistory = {
-        id: nextId,
-        symbol,
-        name: selectedAvailableStock.name,
-        price: selectedAvailableStock.price,
-        change: selectedAvailableStock.change,
-        changePercent: selectedAvailableStock.changePercent,
-        quantity,
-        purchasePrice,
-        history: selectedAvailableStock.history
-      };
-      
-      setStocks([...stocks, newStock]);
-      setNextId(nextId + 1);
-      toast.success(`Added ${symbol} to portfolio`);
-    }
+    // Create new bet
+    const newBet: Bet = {
+      id: nextId,
+      matchId,
+      teamBetOn: team,
+      odds,
+      amount,
+      potential,
+      status: "pending",
+      dateCreated: new Date().toISOString()
+    };
+    
+    // Add bet to state
+    setBets([...bets, newBet]);
+    setNextId(nextId + 1);
+    
+    toast.success(`Bet placed on ${team}`);
   };
 
-  const handleRemoveStock = (stockId: number) => {
-    const stockToRemove = stocks.find(stock => stock.id === stockId);
-    
-    if (!stockToRemove) return;
-    
-    // Remove the stock
-    const updatedStocks = stocks.filter(stock => stock.id !== stockId);
-    setStocks(updatedStocks);
-    
-    // If the selected stock is removed, select another one
-    if (selectedStock && selectedStock.id === stockId) {
-      setSelectedStock(updatedStocks.length > 0 ? updatedStocks[0] : null);
-    }
-    
-    toast.success(`Removed ${stockToRemove.symbol} from portfolio`);
-  };
-
-  const summary = calculatePortfolioSummary(stocks);
+  const summary = calculateBettingSummary(bets);
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
@@ -138,41 +102,46 @@ const Dashboard = () => {
       <main className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         <AnimatedTransition animation="fade" className="mb-8">
           <div className="flex flex-wrap justify-between items-center gap-4">
-            <h1 className="text-3xl font-bold">Portfolio Dashboard</h1>
-            <AddStockForm onAddStock={handleAddStock} />
+            <div>
+              <h1 className="text-3xl font-bold">Sports Betting Dashboard</h1>
+              {user && (
+                <div className="flex items-center mt-2 text-lg font-medium text-gray-700">
+                  <DollarSign className="h-5 w-5 mr-1 text-green-600" />
+                  Balance: ${user.balance?.toFixed(2) || "0.00"}
+                </div>
+              )}
+            </div>
           </div>
         </AnimatedTransition>
 
         <AnimatedTransition animation="fade" delay={100} className="mb-8">
-          <DashboardStats summary={summary} />
+          <BettingStats summary={summary} />
         </AnimatedTransition>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          <div className="lg:col-span-2">
+        <Tabs defaultValue="betting">
+          <TabsList className="mb-6">
+            <TabsTrigger value="betting">Upcoming Matches</TabsTrigger>
+            <TabsTrigger value="history">Bet History</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="betting">
             <AnimatedTransition animation="fade" delay={200}>
-              <GlassCard className="p-6 h-full">
-                <h2 className="text-xl font-semibold mb-4">Portfolio Holdings</h2>
-                <StockGrid stocks={stocks} onRemoveStock={handleRemoveStock} />
+              <GlassCard className="p-6">
+                <h2 className="text-xl font-semibold mb-4">Upcoming Matches</h2>
+                <MatchGrid matches={matches} onPlaceBet={handlePlaceBet} />
               </GlassCard>
             </AnimatedTransition>
-          </div>
-
-          <div>
-            <AnimatedTransition animation="fade" delay={300}>
-              <GlassCard className="p-6 h-full">
-                {selectedStock ? (
-                  <StockChart stock={selectedStock} />
-                ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <p className="text-gray-500">
-                      No stocks in portfolio. Add stocks to see their performance.
-                    </p>
-                  </div>
-                )}
+          </TabsContent>
+          
+          <TabsContent value="history">
+            <AnimatedTransition animation="fade" delay={200}>
+              <GlassCard className="p-6">
+                <h2 className="text-xl font-semibold mb-4">Your Betting History</h2>
+                <BetHistory bets={bets} />
               </GlassCard>
             </AnimatedTransition>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

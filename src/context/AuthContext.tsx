@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<boolean>;
   register: (credentials: RegisterCredentials) => Promise<boolean>;
   logout: () => void;
+  updateBalance: (amount: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,7 +54,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: foundUser.id,
         username: foundUser.username,
         email: foundUser.email,
-        isAdmin: foundUser.isAdmin
+        isAdmin: foundUser.isAdmin,
+        balance: foundUser.balance || 1000 // Default balance
       };
       
       setUser(userInfo);
@@ -94,28 +96,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id: mockUsers.length + 1,
       username,
       email,
-      isAdmin: false
+      isAdmin: false,
+      balance: 1000 // Starting balance
     };
     
     setUser(userInfo);
     setIsAuthenticated(true);
     localStorage.setItem("user", JSON.stringify(userInfo));
     
-    toast.success("Registration successful!");
+    toast.success("Registration successful! You've received $1000 in betting credits.");
     return true;
+  };
+
+  const updateBalance = (amount: number) => {
+    if (!user) return;
+    
+    const newBalance = (user.balance || 0) + amount;
+    const updatedUser = { ...user, balance: newBalance };
+    
+    setUser(updatedUser);
+    localStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem("user");
-    localStorage.removeItem("adminStocks"); // Clear stocks when logging out
+    localStorage.removeItem("adminBets"); // Clear bets when logging out
     navigate("/login");
     toast.info("Successfully logged out");
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout, updateBalance }}>
       {children}
     </AuthContext.Provider>
   );
