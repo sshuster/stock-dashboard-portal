@@ -1,170 +1,275 @@
 
 import { Campaign } from "@/types";
-import { useState } from "react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
-import { Textarea } from "./ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { DatePicker } from "./ui/calendar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import GlassCard from "./ui-custom/GlassCard";
-import AnimatedTransition from "./ui-custom/AnimatedTransition";
+import { cn } from "@/lib/utils";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { toast } from "sonner";
 
+// Form schema with validation
+const campaignFormSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  description: z.string().optional(),
+  targetAudience: z.string().optional(),
+  status: z.enum(["draft", "planned", "active", "paused", "completed"]),
+  startDate: z.date(),
+  endDate: z.date().optional(),
+  budget: z.number().optional(),
+});
+
+type CampaignFormValues = z.infer<typeof campaignFormSchema>;
+
 interface CampaignFormProps {
-  onSubmit: (campaign: Omit<Campaign, "id">) => Promise<void>;
-  initialValues?: Partial<Campaign>;
+  campaign?: Campaign;
+  onSubmit: (values: CampaignFormValues) => void;
+  onCancel: () => void;
 }
 
-const CampaignForm: React.FC<CampaignFormProps> = ({ onSubmit, initialValues }) => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState<Partial<Campaign>>({
-    name: "",
-    description: "",
-    targetAudience: "",
-    status: "draft",
-    startDate: format(new Date(), "yyyy-MM-dd"),
-    endDate: "",
-    budget: undefined,
-    ...initialValues,
+const CampaignForm: React.FC<CampaignFormProps> = ({ campaign, onSubmit, onCancel }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Set default values when editing an existing campaign
+  const defaultValues: Partial<CampaignFormValues> = campaign
+    ? {
+        name: campaign.name,
+        description: campaign.description || '',
+        targetAudience: campaign.targetAudience || '',
+        status: campaign.status,
+        startDate: new Date(campaign.startDate),
+        endDate: campaign.endDate ? new Date(campaign.endDate) : undefined,
+        budget: campaign.budget,
+      }
+    : {
+        name: '',
+        description: '',
+        targetAudience: '',
+        status: 'draft',
+        startDate: new Date(),
+      };
+
+  const form = useForm<CampaignFormValues>({
+    resolver: zodResolver(campaignFormSchema),
+    defaultValues,
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (value: string, name: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleDateChange = (date: Date | undefined, field: "startDate" | "endDate") => {
-    if (date) {
-      setFormData((prev) => ({ ...prev, [field]: format(date, "yyyy-MM-dd") }));
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
+  const handleSubmit = async (values: CampaignFormValues) => {
+    setIsSubmitting(true);
     try {
-      if (!formData.name) {
-        toast.error("Campaign name is required");
-        return;
-      }
-
-      await onSubmit(formData as Omit<Campaign, "id">);
-      toast.success("Campaign saved successfully");
+      await onSubmit(values);
+      toast.success(`Campaign ${campaign ? 'updated' : 'created'} successfully!`);
     } catch (error) {
-      console.error("Error submitting campaign:", error);
-      toast.error("Failed to save campaign");
+      toast.error(`Failed to ${campaign ? 'update' : 'create'} campaign`);
+      console.error(error);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <AnimatedTransition animation="scale" className="w-full">
-      <GlassCard className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Campaign Name</Label>
-            <Input
-              id="name"
-              name="name"
-              placeholder="Summer Email Campaign"
-              value={formData.name}
-              onChange={handleChange}
-              required
-            />
-          </div>
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Campaign Name</FormLabel>
+              <FormControl>
+                <Input placeholder="Enter campaign name" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              name="description"
-              placeholder="Campaign goals and description"
-              value={formData.description || ""}
-              onChange={handleChange}
-              rows={3}
-            />
-          </div>
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea 
+                  placeholder="Describe the campaign objective and details" 
+                  className="min-h-[120px]" 
+                  {...field} 
+                  value={field.value || ''}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-          <div className="space-y-2">
-            <Label htmlFor="targetAudience">Target Audience</Label>
-            <Input
-              id="targetAudience"
-              name="targetAudience"
-              placeholder="Small business owners, 25-55 years old"
-              value={formData.targetAudience || ""}
-              onChange={handleChange}
-            />
-          </div>
+        <FormField
+          control={form.control}
+          name="targetAudience"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Target Audience</FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="Who is this campaign targeting?" 
+                  {...field} 
+                  value={field.value || ''}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => handleSelectChange(value, "status")}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="planned">Planned</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="paused">Paused</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="startDate"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel>Start Date</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "pl-3 text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <div className="space-y-2">
-              <Label htmlFor="budget">Budget</Label>
-              <Input
-                id="budget"
-                name="budget"
-                type="number"
-                placeholder="5000"
-                value={formData.budget || ""}
-                onChange={handleChange}
-              />
-            </div>
-          </div>
+          <FormField
+            control={form.control}
+            name="endDate"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel>End Date (Optional)</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "pl-3 text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Start Date</Label>
-              <DatePicker
-                selected={formData.startDate ? new Date(formData.startDate) : undefined}
-                onSelect={(date) => handleDateChange(date, "startDate")}
-              />
-            </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="status"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Status</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select campaign status" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="planned">Planned</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <div className="space-y-2">
-              <Label>End Date</Label>
-              <DatePicker
-                selected={formData.endDate ? new Date(formData.endDate) : undefined}
-                onSelect={(date) => handleDateChange(date, "endDate")}
-              />
-            </div>
-          </div>
+          <FormField
+            control={form.control}
+            name="budget"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Budget (Optional)</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    placeholder="Campaign budget"
+                    {...field}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      field.onChange(value === "" ? undefined : parseFloat(value));
+                    }}
+                    value={field.value === undefined ? "" : field.value}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
 
-          <Button
-            type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-            disabled={isLoading}
-          >
-            {isLoading ? "Saving..." : initialValues?.id ? "Update Campaign" : "Create Campaign"}
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
           </Button>
-        </form>
-      </GlassCard>
-    </AnimatedTransition>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : campaign ? 'Update Campaign' : 'Create Campaign'}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 };
 

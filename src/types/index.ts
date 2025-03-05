@@ -1,4 +1,3 @@
-
 export interface User {
   id: number;
   username: string;
@@ -6,6 +5,7 @@ export interface User {
   isAdmin: boolean;
   companyName?: string;
   industry?: string;
+  balance?: number;
 }
 
 export interface LoginCredentials {
@@ -58,9 +58,43 @@ export interface DashboardStats {
   recentLeads: Lead[];
 }
 
-// We need to remove all the outdated components,
-// but since they rely on these types, let's add them here temporarily
-// just to make TypeScript happy.
+export interface Match {
+  id: number;
+  homeTeam: string;
+  awayTeam: string;
+  sport: string;
+  league: string;
+  startTime: string;
+  homeOdds: number;
+  awayOdds: number;
+  drawOdds?: number;
+  status: "scheduled" | "live" | "finished" | "cancelled";
+}
+
+export interface MatchWithBets extends Match {
+  bets?: Bet[];
+}
+
+export interface Bet {
+  id: number;
+  matchId: number;
+  teamBetOn: string;
+  odds: number;
+  amount: number;
+  potential: number;
+  status: "pending" | "won" | "lost" | "cancelled";
+  dateCreated: string;
+}
+
+export interface BettingSummary {
+  totalBets: number;
+  pendingBets: number;
+  totalWagered: number;
+  totalWon: number;
+  netProfit: number;
+  winRate: number;
+}
+
 export interface Stock {
   id: number;
   symbol: string;

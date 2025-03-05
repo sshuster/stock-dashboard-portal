@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<boolean>;
   register: (credentials: RegisterCredentials) => Promise<boolean>;
   logout: () => void;
+  updateBalance: (amount: number) => void; // Add the updateBalance function
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -100,6 +101,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Add updateBalance function
+  const updateBalance = (amount: number) => {
+    if (user) {
+      const newBalance = (user.balance || 0) + amount;
+      const updatedUser = { ...user, balance: newBalance };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
@@ -110,7 +121,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout, updateBalance }}>
       {children}
     </AuthContext.Provider>
   );
