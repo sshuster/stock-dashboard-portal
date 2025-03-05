@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 interface AuthFormProps {
   mode: "login" | "register";
@@ -22,11 +23,17 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
     email: "",
     password: "",
     confirmPassword: "",
+    companyName: "",
+    industry: "",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, industry: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,6 +50,11 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
         };
         success = await login(loginData);
       } else {
+        if (formData.password !== formData.confirmPassword) {
+          alert("Passwords do not match");
+          setIsLoading(false);
+          return;
+        }
         success = await register(formData);
       }
 
@@ -73,7 +85,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
               value={formData.username}
               onChange={handleChange}
               required
-              className="border-gray-200 focus:border-apple-blue"
+              className="border-gray-200 focus:border-blue-600"
             />
           </div>
 
@@ -88,7 +100,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
                 value={formData.email}
                 onChange={handleChange}
                 required
-                className="border-gray-200 focus:border-apple-blue"
+                className="border-gray-200 focus:border-blue-600"
               />
             </div>
           )}
@@ -103,29 +115,65 @@ const AuthForm: React.FC<AuthFormProps> = ({ mode }) => {
               value={formData.password}
               onChange={handleChange}
               required
-              className="border-gray-200 focus:border-apple-blue"
+              className="border-gray-200 focus:border-blue-600"
             />
           </div>
 
           {mode === "register" && (
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                placeholder="Confirm your password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-                className="border-gray-200 focus:border-apple-blue"
-              />
-            </div>
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  placeholder="Confirm your password"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  className="border-gray-200 focus:border-blue-600"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="companyName">Company Name</Label>
+                <Input
+                  id="companyName"
+                  name="companyName"
+                  placeholder="Your company name"
+                  value={formData.companyName}
+                  onChange={handleChange}
+                  className="border-gray-200 focus:border-blue-600"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="industry">Industry</Label>
+                <Select
+                  value={formData.industry}
+                  onValueChange={handleSelectChange}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select your industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="technology">Technology</SelectItem>
+                    <SelectItem value="healthcare">Healthcare</SelectItem>
+                    <SelectItem value="finance">Finance</SelectItem>
+                    <SelectItem value="education">Education</SelectItem>
+                    <SelectItem value="retail">Retail</SelectItem>
+                    <SelectItem value="manufacturing">Manufacturing</SelectItem>
+                    <SelectItem value="services">Services</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
           )}
 
           <Button
             type="submit"
-            className="w-full bg-apple-blue hover:bg-blue-600 text-white"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             disabled={isLoading}
           >
             {isLoading

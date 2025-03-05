@@ -4,7 +4,8 @@ export interface User {
   username: string;
   email: string;
   isAdmin: boolean;
-  balance?: number;
+  companyName?: string;
+  industry?: string;
 }
 
 export interface LoginCredentials {
@@ -15,45 +16,46 @@ export interface LoginCredentials {
 export interface RegisterCredentials extends LoginCredentials {
   email: string;
   confirmPassword: string;
+  companyName?: string;
+  industry?: string;
 }
 
-export interface Bet {
+export interface Lead {
   id: number;
-  matchId: number;
-  teamBetOn: string;
-  odds: number;
-  amount: number;
-  potential: number;
-  status: "pending" | "won" | "lost";
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  jobTitle?: string;
+  source?: string;
+  status: "new" | "contacted" | "qualified" | "converted" | "unqualified";
+  notes?: string;
   dateCreated: string;
+  campaignName?: string;
 }
 
-export interface Match {
+export interface Campaign {
   id: number;
-  homeTeam: string;
-  awayTeam: string;
-  sport: "football" | "basketball" | "baseball" | "hockey" | "soccer";
-  league: string;
-  startTime: string;
-  homeOdds: number;
-  awayOdds: number;
-  drawOdds?: number;
-  status: "scheduled" | "live" | "completed";
-  homeScore?: number;
-  awayScore?: number;
+  name: string;
+  description?: string;
+  targetAudience?: string;
+  status: "draft" | "planned" | "active" | "paused" | "completed";
+  startDate: string;
+  endDate?: string;
+  budget?: number;
 }
 
-export interface MatchWithBets extends Match {
-  userBets?: Bet[];
+export interface CampaignDetails extends Campaign {
+  leads?: Lead[];
 }
 
-export interface BettingSummary {
-  totalBets: number;
-  pendingBets: number;
-  totalWagered: number;
-  totalWon: number;
-  netProfit: number;
-  winRate: number;
+export interface DashboardStats {
+  totalCampaigns: number;
+  activeCampaigns: number;
+  totalLeads: number;
+  leadsByStatus: Record<string, number>;
+  recentLeads: Lead[];
 }
 
 // We need to remove all the outdated components,

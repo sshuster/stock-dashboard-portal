@@ -1,5 +1,4 @@
 
-import { mockUsers } from "@/lib/mockData";
 import { LoginCredentials, RegisterCredentials, User } from "@/types";
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +10,6 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<boolean>;
   register: (credentials: RegisterCredentials) => Promise<boolean>;
   logout: () => void;
-  updateBalance: (amount: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,98 +35,82 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (credentials: LoginCredentials): Promise<boolean> => {
-    // Always use frontend authentication for admin
-    // For other users, this would use the backend in a real app
-    const { username, password } = credentials;
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Authentication logic
-    const foundUser = mockUsers.find(u => 
-      u.username === username && u.password === password
-    );
-    
-    if (foundUser) {
-      const userInfo: User = {
-        id: foundUser.id,
-        username: foundUser.username,
-        email: foundUser.email,
-        isAdmin: foundUser.isAdmin,
-        balance: foundUser.balance || 1000 // Default balance
-      };
+    try {
+      const response = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        toast.error(data.message || "Login failed");
+        return false;
+      }
+      
+      const userInfo: User = data.user;
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(userInfo));
       
       setUser(userInfo);
       setIsAuthenticated(true);
-      localStorage.setItem("user", JSON.stringify(userInfo));
       
       toast.success(`Welcome back, ${userInfo.username}!`);
       return true;
-    } else {
-      toast.error("Invalid username or password");
+    } catch (error) {
+      console.error("Login error:", error);
+      toast.error("Login failed. Please try again.");
       return false;
     }
   };
 
   const register = async (credentials: RegisterCredentials): Promise<boolean> => {
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // In a real app, this would create a new user in the backend
-    // For now, we'll just simulate and only allow registering non-existing usernames
-    const { username, email, password, confirmPassword } = credentials;
-    
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
+    try {
+      const response = await fetch('http://localhost:5000/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(credentials),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        toast.error(data.message || "Registration failed");
+        return false;
+      }
+      
+      const userInfo: User = data.user;
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(userInfo));
+      
+      setUser(userInfo);
+      setIsAuthenticated(true);
+      
+      toast.success("Registration successful!");
+      return true;
+    } catch (error) {
+      console.error("Registration error:", error);
+      toast.error("Registration failed. Please try again.");
       return false;
     }
-    
-    const userExists = mockUsers.some(u => u.username === username);
-    
-    if (userExists) {
-      toast.error("Username already exists");
-      return false;
-    }
-    
-    // In a real app, we would create the user in the database
-    // For demo purposes, we'll just log in directly
-    const userInfo: User = {
-      id: mockUsers.length + 1,
-      username,
-      email,
-      isAdmin: false,
-      balance: 1000 // Starting balance
-    };
-    
-    setUser(userInfo);
-    setIsAuthenticated(true);
-    localStorage.setItem("user", JSON.stringify(userInfo));
-    
-    toast.success("Registration successful! You've received $1000 in betting credits.");
-    return true;
-  };
-
-  const updateBalance = (amount: number) => {
-    if (!user) return;
-    
-    const newBalance = (user.balance || 0) + amount;
-    const updatedUser = { ...user, balance: newBalance };
-    
-    setUser(updatedUser);
-    localStorage.setItem("user", JSON.stringify(updatedUser));
   };
 
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
     localStorage.removeItem("user");
-    localStorage.removeItem("adminBets"); // Clear bets when logging out
+    localStorage.removeItem("token");
     navigate("/login");
     toast.info("Successfully logged out");
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout, updateBalance }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

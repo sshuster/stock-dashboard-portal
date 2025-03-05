@@ -39,7 +39,7 @@ const Header = () => {
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <Link to="/" className="flex items-center space-x-2">
-          <span className="text-2xl font-bold text-apple-blue">Note14</span>
+          <span className="text-2xl font-bold text-blue-600">LeadWise</span>
         </Link>
 
         <nav className="hidden md:flex items-center space-x-8">
@@ -47,21 +47,32 @@ const Header = () => {
             to="/"
             className={cn(
               "nav-link",
-              location.pathname === "/" && "text-apple-blue font-semibold"
+              location.pathname === "/" && "text-blue-600 font-semibold"
             )}
           >
             Home
           </Link>
           {isAuthenticated && (
-            <Link
-              to="/dashboard"
-              className={cn(
-                "nav-link",
-                location.pathname === "/dashboard" && "text-apple-blue font-semibold"
-              )}
-            >
-              Dashboard
-            </Link>
+            <>
+              <Link
+                to="/dashboard"
+                className={cn(
+                  "nav-link",
+                  location.pathname === "/dashboard" && "text-blue-600 font-semibold"
+                )}
+              >
+                Dashboard
+              </Link>
+              <Link
+                to="/campaigns"
+                className={cn(
+                  "nav-link",
+                  location.pathname.includes("/campaigns") && "text-blue-600 font-semibold"
+                )}
+              >
+                Campaigns
+              </Link>
+            </>
           )}
         </nav>
 
@@ -73,7 +84,7 @@ const Header = () => {
                   variant="ghost"
                   className="relative h-10 w-10 rounded-full"
                 >
-                  <User className="h-5 w-5 text-apple-blue" />
+                  <User className="h-5 w-5 text-blue-600" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -85,6 +96,12 @@ const Header = () => {
                 <DropdownMenuItem disabled>
                   <span className="text-sm font-medium">{user?.username}</span>
                 </DropdownMenuItem>
+                {user?.companyName && (
+                  <DropdownMenuItem disabled>
+                    <span className="text-sm">{user.companyName}</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem className="cursor-pointer" onClick={logout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Log out</span>
@@ -96,13 +113,13 @@ const Header = () => {
               <Link to="/login">
                 <Button
                   variant="ghost"
-                  className="text-sm font-medium text-gray-700 hover:text-apple-blue"
+                  className="text-sm font-medium text-gray-700 hover:text-blue-600"
                 >
                   Log in
                 </Button>
               </Link>
               <Link to="/register">
-                <Button className="bg-apple-blue hover:bg-blue-600 text-white">
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
                   Sign up
                 </Button>
               </Link>

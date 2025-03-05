@@ -20,9 +20,9 @@ const Login = () => {
       <div className="flex-1 flex flex-col justify-center items-center px-4 sm:px-6 lg:px-8 py-12">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <h1 className="text-4xl font-bold text-apple-blue">Note14</h1>
+            <h1 className="text-4xl font-bold text-blue-600">LeadWise</h1>
             <p className="mt-3 text-gray-600">
-              Sign in to access your stock portfolio
+              Sign in to access your lead generation campaigns
             </p>
           </div>
           
@@ -31,7 +31,7 @@ const Login = () => {
           <div className="text-center mt-6">
             <p className="text-sm text-gray-600">
               Don&apos;t have an account?{" "}
-              <Link to="/register" className="text-apple-blue hover:underline">
+              <Link to="/register" className="text-blue-600 hover:underline">
                 Create one
               </Link>
             </p>

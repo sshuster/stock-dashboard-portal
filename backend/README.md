@@ -1,7 +1,7 @@
 
-# Sports Betting Backend
+# Lead Generation Backend
 
-This is the backend for the BetWiser Sports Betting application. It provides APIs for user authentication, sports match management, and bet tracking.
+This is the backend for the LeadWise Lead Generation application. It provides APIs for user authentication, campaign management, and lead tracking.
 
 ## Setup
 
@@ -19,11 +19,11 @@ The server will start on http://localhost:5000
 
 ## Database
 
-The application uses SQLite for data storage. The database file `sports_betting.db` will be created automatically when the application starts. It contains tables for:
+The application uses SQLite for data storage. The database file `lead_generation.db` will be created automatically when the application starts. It contains tables for:
 
-- `users` - User accounts and balances
-- `matches` - Sports matches information
-- `bets` - User betting history
+- `users` - User accounts and company information
+- `campaigns` - Lead generation campaign details
+- `leads` - Leads collected through campaigns
 
 ## API Endpoints
 
@@ -31,19 +31,20 @@ The application uses SQLite for data storage. The database file `sports_betting.
 - POST /api/register - Register a new user
 - POST /api/login - Login and get authentication token
 
-### Matches
-- GET /api/matches - Get all upcoming matches
-- GET /api/matches/:id - Get a specific match details
-- GET /api/matches/live - Get currently live matches
+### Campaigns
+- GET /api/campaigns - Get all campaigns for the authenticated user
+- POST /api/campaigns - Create a new campaign
+- GET /api/campaigns/:id - Get details of a specific campaign
 
-### Betting
-- GET /api/bets - Get all bets for the authenticated user
-- POST /api/bets - Place a new bet
-- GET /api/bets/history - Get bet history for the authenticated user
-- GET /api/betting/summary - Get betting summary statistics
+### Leads
+- POST /api/campaigns/:id/leads - Add a new lead to a campaign
+- PUT /api/campaigns/:id/leads/:leadId - Update lead information
+
+### Dashboard
+- GET /api/dashboardStats - Get dashboard statistics for the authenticated user
 
 ### Mock Data
-- GET /api/mock/generate - Generate mock match data for testing
+- GET /api/mock/generate - Generate mock campaign and lead data for testing
 
 ## Database Schema
 
@@ -54,36 +55,38 @@ username TEXT UNIQUE NOT NULL
 email TEXT UNIQUE NOT NULL
 password TEXT NOT NULL
 is_admin BOOLEAN DEFAULT 0
-balance REAL DEFAULT 1000.0
+company_name TEXT
+industry TEXT
+registration_date TEXT NOT NULL
 ```
 
-### Matches Table
-```
-id INTEGER PRIMARY KEY AUTOINCREMENT
-home_team TEXT NOT NULL
-away_team TEXT NOT NULL
-sport TEXT NOT NULL
-league TEXT NOT NULL
-start_time TEXT NOT NULL
-home_odds REAL NOT NULL
-away_odds REAL NOT NULL
-draw_odds REAL
-status TEXT NOT NULL
-home_score INTEGER
-away_score INTEGER
-```
-
-### Bets Table
+### Campaigns Table
 ```
 id INTEGER PRIMARY KEY AUTOINCREMENT
 user_id INTEGER NOT NULL
-match_id INTEGER NOT NULL
-team_bet_on TEXT NOT NULL
-odds REAL NOT NULL
-amount REAL NOT NULL
-potential REAL NOT NULL
+name TEXT NOT NULL
+description TEXT
+target_audience TEXT
 status TEXT NOT NULL
-date_created TEXT NOT NULL
+start_date TEXT NOT NULL
+end_date TEXT
+budget REAL
 FOREIGN KEY (user_id) REFERENCES users (id)
-FOREIGN KEY (match_id) REFERENCES matches (id)
+```
+
+### Leads Table
+```
+id INTEGER PRIMARY KEY AUTOINCREMENT
+campaign_id INTEGER NOT NULL
+first_name TEXT
+last_name TEXT
+email TEXT NOT NULL
+phone TEXT
+company TEXT
+job_title TEXT
+source TEXT
+status TEXT NOT NULL
+notes TEXT
+date_created TEXT NOT NULL
+FOREIGN KEY (campaign_id) REFERENCES campaigns (id)
 ```

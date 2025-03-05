@@ -1,149 +1,125 @@
 
-import AnimatedTransition from "@/components/ui-custom/AnimatedTransition";
-import BetHistory from "@/components/BetHistory";
-import BettingStats from "@/components/BettingStats";
-import GlassCard from "@/components/ui-custom/GlassCard";
-import Header from "@/components/Header";
-import MatchGrid from "@/components/MatchGrid";
-import { useAuth } from "@/context/AuthContext";
-import { calculateBettingSummary, mockBets, mockMatches } from "@/lib/mockData";
-import { Bet, MatchWithBets } from "@/types";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/context/AuthContext";
+import AnimatedTransition from "@/components/ui-custom/AnimatedTransition";
+import Header from "@/components/Header";
+import DashboardStats from "@/components/DashboardStats";
+import { Button } from "@/components/ui/button";
+import { fetchDashboardStats, generateMockData } from "@/services/api";
+import { DashboardStats as IDashboardStats } from "@/types";
+import { PlusCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign } from "lucide-react";
 
 const Dashboard = () => {
-  const { isAuthenticated, user, updateBalance } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
-  const [matches, setMatches] = useState<MatchWithBets[]>([]);
-  const [bets, setBets] = useState<Bet[]>([]);
-  const [nextId, setNextId] = useState(0);
+  const [stats, setStats] = useState<IDashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/login");
-    } else {
-      // Load user matches and bets
-      if (user?.username === "admin") {
-        const savedBets = localStorage.getItem('adminBets');
-        if (savedBets) {
-          try {
-            const parsedBets = JSON.parse(savedBets) as Bet[];
-            setBets(parsedBets);
-            setNextId(Math.max(...parsedBets.map(b => b.id), 0) + 1);
-          } catch (error) {
-            console.error('Failed to parse saved bets:', error);
-            // Fallback to mock data
-            setBets(mockBets);
-            setNextId(mockBets.length + 1);
-          }
-        } else {
-          // No saved bets, use mock data
-          setBets(mockBets);
-          setNextId(mockBets.length + 1);
-        }
-        
-        // Always use mock matches for demo
-        setMatches(mockMatches);
-      } else {
-        // For non-admin users, use empty state or connect to backend
-        setBets([]);
-        setMatches(mockMatches);
-        setNextId(1);
-      }
-    }
-  }, [isAuthenticated, navigate, user]);
-
-  // Save admin bets to localStorage whenever they change
-  useEffect(() => {
-    if (user?.username === "admin" && bets.length > 0) {
-      localStorage.setItem('adminBets', JSON.stringify(bets));
-    }
-  }, [bets, user]);
-
-  const handlePlaceBet = (matchId: number, team: string, odds: number, amount: number) => {
-    const match = matches.find(m => m.id === matchId);
-    
-    if (!match) {
-      toast.error("Match not found");
       return;
     }
-    
-    // Calculate potential winnings
-    const potential = amount * odds;
-    
-    // Create new bet
-    const newBet: Bet = {
-      id: nextId,
-      matchId,
-      teamBetOn: team,
-      odds,
-      amount,
-      potential,
-      status: "pending",
-      dateCreated: new Date().toISOString()
+
+    const loadDashboard = async () => {
+      setLoading(true);
+      try {
+        const statsData = await fetchDashboardStats();
+        if (statsData) {
+          setStats(statsData);
+        }
+      } catch (error) {
+        console.error("Error loading dashboard:", error);
+        toast.error("Failed to load dashboard data");
+      } finally {
+        setLoading(false);
+      }
     };
-    
-    // Add bet to state
-    setBets([...bets, newBet]);
-    setNextId(nextId + 1);
-    
-    toast.success(`Bet placed on ${team}`);
+
+    loadDashboard();
+  }, [isAuthenticated, navigate]);
+
+  const handleGenerateMockData = async () => {
+    const confirmed = window.confirm(
+      "This will generate sample campaign and lead data for testing. Continue?"
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      const success = await generateMockData();
+      if (success) {
+        toast.success("Mock data generated successfully");
+        // Reload stats
+        const statsData = await fetchDashboardStats();
+        if (statsData) {
+          setStats(statsData);
+        }
+      } else {
+        toast.error("Failed to generate mock data");
+      }
+    } catch (error) {
+      console.error("Error generating mock data:", error);
+      toast.error("Failed to generate mock data");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const summary = calculateBettingSummary(bets);
-
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <AnimatedTransition animation="fade" className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
-
-      <main className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-        <AnimatedTransition animation="fade" className="mb-8">
-          <div className="flex flex-wrap justify-between items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold">Sports Betting Dashboard</h1>
-              {user && (
-                <div className="flex items-center mt-2 text-lg font-medium text-gray-700">
-                  <DollarSign className="h-5 w-5 mr-1 text-green-600" />
-                  Balance: ${user.balance?.toFixed(2) || "0.00"}
-                </div>
-              )}
-            </div>
+      <main className="container mx-auto px-4 py-24">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-gray-500 mt-1">
+              Welcome back{user?.username ? `, ${user.username}` : ""}
+            </p>
           </div>
-        </AnimatedTransition>
+          <div className="flex space-x-2 mt-4 md:mt-0">
+            {user?.isAdmin && (
+              <Button
+                variant="outline"
+                onClick={handleGenerateMockData}
+                disabled={loading}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" /> Generate Test Data
+              </Button>
+            )}
+            <Button
+              onClick={() => navigate("/campaigns/new")}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" /> New Campaign
+            </Button>
+          </div>
+        </div>
 
-        <AnimatedTransition animation="fade" delay={100} className="mb-8">
-          <BettingStats summary={summary} />
-        </AnimatedTransition>
-
-        <Tabs defaultValue="betting">
-          <TabsList className="mb-6">
-            <TabsTrigger value="betting">Upcoming Matches</TabsTrigger>
-            <TabsTrigger value="history">Bet History</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="betting">
-            <AnimatedTransition animation="fade" delay={200}>
-              <GlassCard className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Upcoming Matches</h2>
-                <MatchGrid matches={matches} onPlaceBet={handlePlaceBet} />
-              </GlassCard>
-            </AnimatedTransition>
-          </TabsContent>
-          
-          <TabsContent value="history">
-            <AnimatedTransition animation="fade" delay={200}>
-              <GlassCard className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Your Betting History</h2>
-                <BetHistory bets={bets} />
-              </GlassCard>
-            </AnimatedTransition>
-          </TabsContent>
-        </Tabs>
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        ) : stats ? (
+          <DashboardStats stats={stats} />
+        ) : (
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-8 text-center">
+            <h2 className="text-xl font-semibold mb-2">No Data Available</h2>
+            <p className="text-gray-500 mb-6">
+              Start creating campaigns to generate leads and see your dashboard come to life.
+            </p>
+            <Button
+              onClick={() => navigate("/campaigns/new")}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" /> Create Your First Campaign
+            </Button>
+          </div>
+        )}
       </main>
-    </div>
+    </AnimatedTransition>
   );
 };
 

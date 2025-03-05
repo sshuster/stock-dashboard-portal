@@ -16,7 +16,7 @@ app.config['SECRET_KEY'] = 'your-secret-key'  # Change this in production
 app.config['JWT_EXPIRATION_SECONDS'] = 86400  # 24 hours
 
 # Database setup
-DB_PATH = os.path.join(os.path.dirname(__file__), 'sports_betting.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), 'lead_generation.db')
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -30,42 +30,44 @@ def init_db():
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         is_admin BOOLEAN DEFAULT 0,
-        balance REAL DEFAULT 1000.0
+        company_name TEXT,
+        industry TEXT,
+        registration_date TEXT NOT NULL
     )
     ''')
     
-    # Create matches table
+    # Create campaigns table
     cursor.execute('''
-    CREATE TABLE IF NOT EXISTS matches (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        home_team TEXT NOT NULL,
-        away_team TEXT NOT NULL,
-        sport TEXT NOT NULL,
-        league TEXT NOT NULL,
-        start_time TEXT NOT NULL,
-        home_odds REAL NOT NULL,
-        away_odds REAL NOT NULL,
-        draw_odds REAL,
-        status TEXT NOT NULL,
-        home_score INTEGER,
-        away_score INTEGER
-    )
-    ''')
-    
-    # Create bets table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS bets (
+    CREATE TABLE IF NOT EXISTS campaigns (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        match_id INTEGER NOT NULL,
-        team_bet_on TEXT NOT NULL,
-        odds REAL NOT NULL,
-        amount REAL NOT NULL,
-        potential REAL NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        target_audience TEXT,
         status TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT,
+        budget REAL,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    )
+    ''')
+    
+    # Create leads table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS leads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        campaign_id INTEGER NOT NULL,
+        first_name TEXT,
+        last_name TEXT,
+        email TEXT NOT NULL,
+        phone TEXT,
+        company TEXT,
+        job_title TEXT,
+        source TEXT,
+        status TEXT NOT NULL,
+        notes TEXT,
         date_created TEXT NOT NULL,
-        FOREIGN KEY (user_id) REFERENCES users (id),
-        FOREIGN KEY (match_id) REFERENCES matches (id)
+        FOREIGN KEY (campaign_id) REFERENCES campaigns (id)
     )
     ''')
     
@@ -73,8 +75,8 @@ def init_db():
     cursor.execute("SELECT * FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
         cursor.execute(
-            "INSERT INTO users (username, email, password, is_admin) VALUES (?, ?, ?, ?)",
-            ('admin', 'admin@example.com', generate_password_hash('admin'), True)
+            "INSERT INTO users (username, email, password, is_admin, registration_date) VALUES (?, ?, ?, ?, ?)",
+            ('admin', 'admin@example.com', generate_password_hash('admin'), True, datetime.now().isoformat())
         )
     
     conn.commit()
@@ -148,6 +150,8 @@ def register():
     username = data.get('username')
     email = data.get('email')
     password = data.get('password')
+    company_name = data.get('companyName')
+    industry = data.get('industry')
     
     if not username or not email or not password:
         return jsonify({'message': 'Missing required fields'}), 400
@@ -159,8 +163,8 @@ def register():
     
     try:
         cursor.execute(
-            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
-            (username, email, hashed_password)
+            "INSERT INTO users (username, email, password, company_name, industry, registration_date) VALUES (?, ?, ?, ?, ?, ?)",
+            (username, email, hashed_password, company_name, industry, datetime.now().isoformat())
         )
         conn.commit()
         
@@ -179,7 +183,8 @@ def register():
                 'username': username,
                 'email': email,
                 'isAdmin': False,
-                'balance': 1000.0  # Default starting balance
+                'companyName': company_name,
+                'industry': industry
             }
         }), 201
     except sqlite3.IntegrityError:
@@ -215,362 +220,455 @@ def login():
             'username': user['username'],
             'email': user['email'],
             'isAdmin': bool(user['is_admin']),
-            'balance': user['balance']
+            'companyName': user['company_name'],
+            'industry': user['industry']
         }
     }), 200
 
-# Match routes
-@app.route('/api/matches', methods=['GET'])
-def get_matches():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM matches
-        WHERE status = 'scheduled' OR status = 'live'
-        ORDER BY start_time
-    """)
-    
-    matches_db = cursor.fetchall()
-    conn.close()
-    
-    matches = []
-    for match in matches_db:
-        matches.append({
-            'id': match['id'],
-            'homeTeam': match['home_team'],
-            'awayTeam': match['away_team'],
-            'sport': match['sport'],
-            'league': match['league'],
-            'startTime': match['start_time'],
-            'homeOdds': match['home_odds'],
-            'awayOdds': match['away_odds'],
-            'drawOdds': match['draw_odds'],
-            'status': match['status'],
-            'homeScore': match['home_score'],
-            'awayScore': match['away_score']
-        })
-    
-    return jsonify(matches), 200
-
-@app.route('/api/matches/<int:match_id>', methods=['GET'])
-def get_match(match_id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM matches WHERE id = ?", (match_id,))
-    
-    match = cursor.fetchone()
-    conn.close()
-    
-    if not match:
-        return jsonify({'message': 'Match not found'}), 404
-    
-    return jsonify({
-        'id': match['id'],
-        'homeTeam': match['home_team'],
-        'awayTeam': match['away_team'],
-        'sport': match['sport'],
-        'league': match['league'],
-        'startTime': match['start_time'],
-        'homeOdds': match['home_odds'],
-        'awayOdds': match['away_odds'],
-        'drawOdds': match['draw_odds'],
-        'status': match['status'],
-        'homeScore': match['home_score'],
-        'awayScore': match['away_score']
-    }), 200
-
-@app.route('/api/matches/live', methods=['GET'])
-def get_live_matches():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM matches WHERE status = 'live' ORDER BY start_time")
-    
-    matches_db = cursor.fetchall()
-    conn.close()
-    
-    matches = []
-    for match in matches_db:
-        matches.append({
-            'id': match['id'],
-            'homeTeam': match['home_team'],
-            'awayTeam': match['away_team'],
-            'sport': match['sport'],
-            'league': match['league'],
-            'startTime': match['start_time'],
-            'homeOdds': match['home_odds'],
-            'awayOdds': match['away_odds'],
-            'drawOdds': match['draw_odds'],
-            'status': match['status'],
-            'homeScore': match['home_score'],
-            'awayScore': match['away_score']
-        })
-    
-    return jsonify(matches), 200
-
-# Betting routes
-@app.route('/api/bets', methods=['GET'])
+# Campaign routes
+@app.route('/api/campaigns', methods=['GET'])
 @token_required
-def get_user_bets(current_user):
+def get_campaigns(current_user):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT b.*, m.home_team, m.away_team 
-        FROM bets b
-        JOIN matches m ON b.match_id = m.id
-        WHERE b.user_id = ?
-        ORDER BY b.date_created DESC
+        SELECT * FROM campaigns 
+        WHERE user_id = ? 
+        ORDER BY start_date DESC
     """, (current_user['id'],))
     
-    bets_db = cursor.fetchall()
+    campaigns_db = cursor.fetchall()
     conn.close()
     
-    bets = []
-    for bet in bets_db:
-        bets.append({
-            'id': bet['id'],
-            'matchId': bet['match_id'],
-            'teamBetOn': bet['team_bet_on'],
-            'odds': bet['odds'],
-            'amount': bet['amount'],
-            'potential': bet['potential'],
-            'status': bet['status'],
-            'dateCreated': bet['date_created'],
-            'homeTeam': bet['home_team'],
-            'awayTeam': bet['away_team']
+    campaigns = []
+    for campaign in campaigns_db:
+        campaigns.append({
+            'id': campaign['id'],
+            'name': campaign['name'],
+            'description': campaign['description'],
+            'targetAudience': campaign['target_audience'],
+            'status': campaign['status'],
+            'startDate': campaign['start_date'],
+            'endDate': campaign['end_date'],
+            'budget': campaign['budget']
         })
     
-    return jsonify(bets), 200
+    return jsonify(campaigns), 200
 
-@app.route('/api/bets', methods=['POST'])
+@app.route('/api/campaigns', methods=['POST'])
 @token_required
-def place_bet(current_user):
+def create_campaign(current_user):
     data = request.get_json()
     
-    match_id = data.get('matchId')
-    team_bet_on = data.get('teamBetOn')
-    odds = data.get('odds')
-    amount = data.get('amount')
+    name = data.get('name')
+    description = data.get('description')
+    target_audience = data.get('targetAudience')
+    status = data.get('status', 'draft')
+    start_date = data.get('startDate', datetime.now().isoformat())
+    end_date = data.get('endDate')
+    budget = data.get('budget')
     
-    if not match_id or not team_bet_on or not odds or not amount:
-        return jsonify({'message': 'Missing required fields'}), 400
-        
+    if not name:
+        return jsonify({'message': 'Campaign name is required'}), 400
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Check if user has enough balance
-    if current_user['balance'] < amount:
-        conn.close()
-        return jsonify({'message': 'Insufficient balance'}), 400
-        
-    # Check if match exists and is not completed
-    cursor.execute("SELECT * FROM matches WHERE id = ? AND status != 'completed'", (match_id,))
-    match = cursor.fetchone()
-    
-    if not match:
-        conn.close()
-        return jsonify({'message': 'Match not found or already completed'}), 404
-        
-    # Calculate potential winnings
-    potential = amount * odds
-    
     try:
-        # Update user balance
-        new_balance = current_user['balance'] - amount
-        cursor.execute("UPDATE users SET balance = ? WHERE id = ?", (new_balance, current_user['id']))
-        
-        # Create new bet
         cursor.execute(
-            """INSERT INTO bets 
-               (user_id, match_id, team_bet_on, odds, amount, potential, status, date_created) 
+            """INSERT INTO campaigns 
+               (user_id, name, description, target_audience, status, start_date, end_date, budget) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (current_user['id'], match_id, team_bet_on, odds, amount, potential, 'pending', datetime.now().isoformat())
+            (current_user['id'], name, description, target_audience, status, start_date, end_date, budget)
         )
         
         conn.commit()
         
-        # Get the new bet's ID
+        # Get the new campaign's ID
         cursor.execute("SELECT last_insert_rowid()")
-        bet_id = cursor.fetchone()[0]
+        campaign_id = cursor.fetchone()[0]
         
         return jsonify({
-            'message': 'Bet placed successfully',
-            'bet': {
-                'id': bet_id,
-                'matchId': match_id,
-                'teamBetOn': team_bet_on,
-                'odds': odds,
-                'amount': amount,
-                'potential': potential,
-                'status': 'pending',
-                'dateCreated': datetime.now().isoformat()
-            },
-            'newBalance': new_balance
+            'message': 'Campaign created successfully',
+            'campaign': {
+                'id': campaign_id,
+                'name': name,
+                'description': description,
+                'targetAudience': target_audience,
+                'status': status,
+                'startDate': start_date,
+                'endDate': end_date,
+                'budget': budget
+            }
         }), 201
     finally:
         conn.close()
 
-@app.route('/api/bets/history', methods=['GET'])
+@app.route('/api/campaigns/<int:campaign_id>', methods=['GET'])
 @token_required
-def get_bet_history(current_user):
+def get_campaign(current_user, campaign_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT b.*, m.home_team, m.away_team 
-        FROM bets b
-        JOIN matches m ON b.match_id = m.id
-        WHERE b.user_id = ?
-        ORDER BY b.date_created DESC
-    """, (current_user['id'],))
+        SELECT * FROM campaigns 
+        WHERE id = ? AND user_id = ?
+    """, (campaign_id, current_user['id']))
     
-    bets_db = cursor.fetchall()
+    campaign = cursor.fetchone()
+    
+    if not campaign:
+        conn.close()
+        return jsonify({'message': 'Campaign not found'}), 404
+    
+    # Get the leads for this campaign
+    cursor.execute("""
+        SELECT * FROM leads 
+        WHERE campaign_id = ? 
+        ORDER BY date_created DESC
+    """, (campaign_id,))
+    
+    leads_db = cursor.fetchall()
     conn.close()
     
-    bets = []
-    for bet in bets_db:
-        bets.append({
-            'id': bet['id'],
-            'matchId': bet['match_id'],
-            'teamBetOn': bet['team_bet_on'],
-            'odds': bet['odds'],
-            'amount': bet['amount'],
-            'potential': bet['potential'],
-            'status': bet['status'],
-            'dateCreated': bet['date_created'],
-            'homeTeam': bet['home_team'],
-            'awayTeam': bet['away_team']
+    leads = []
+    for lead in leads_db:
+        leads.append({
+            'id': lead['id'],
+            'firstName': lead['first_name'],
+            'lastName': lead['last_name'],
+            'email': lead['email'],
+            'phone': lead['phone'],
+            'company': lead['company'],
+            'jobTitle': lead['job_title'],
+            'source': lead['source'],
+            'status': lead['status'],
+            'notes': lead['notes'],
+            'dateCreated': lead['date_created']
         })
     
-    return jsonify(bets), 200
+    return jsonify({
+        'id': campaign['id'],
+        'name': campaign['name'],
+        'description': campaign['description'],
+        'targetAudience': campaign['target_audience'],
+        'status': campaign['status'],
+        'startDate': campaign['start_date'],
+        'endDate': campaign['end_date'],
+        'budget': campaign['budget'],
+        'leads': leads
+    }), 200
 
-@app.route('/api/betting/summary', methods=['GET'])
+# Lead routes
+@app.route('/api/campaigns/<int:campaign_id>/leads', methods=['POST'])
 @token_required
-def get_betting_summary(current_user):
+def add_lead(current_user, campaign_id):
+    data = request.get_json()
+    
+    email = data.get('email')
+    if not email:
+        return jsonify({'message': 'Email is required'}), 400
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Get total number of bets
-    cursor.execute("SELECT COUNT(*) as total FROM bets WHERE user_id = ?", (current_user['id'],))
-    total_bets = cursor.fetchone()['total']
+    # Check if the campaign exists and belongs to the current user
+    cursor.execute("""
+        SELECT * FROM campaigns 
+        WHERE id = ? AND user_id = ?
+    """, (campaign_id, current_user['id']))
     
-    # Get number of pending bets
-    cursor.execute("SELECT COUNT(*) as pending FROM bets WHERE user_id = ? AND status = 'pending'", (current_user['id'],))
-    pending_bets = cursor.fetchone()['pending']
+    campaign = cursor.fetchone()
+    if not campaign:
+        conn.close()
+        return jsonify({'message': 'Campaign not found'}), 404
     
-    # Get total amount wagered
-    cursor.execute("SELECT SUM(amount) as total_wagered FROM bets WHERE user_id = ?", (current_user['id'],))
-    total_wagered = cursor.fetchone()['total_wagered'] or 0
+    first_name = data.get('firstName')
+    last_name = data.get('lastName')
+    phone = data.get('phone')
+    company = data.get('company')
+    job_title = data.get('jobTitle')
+    source = data.get('source')
+    status = data.get('status', 'new')
+    notes = data.get('notes')
     
-    # Get total amount won
-    cursor.execute("SELECT SUM(potential) as total_won FROM bets WHERE user_id = ? AND status = 'won'", (current_user['id'],))
-    total_won = cursor.fetchone()['total_won'] or 0
+    try:
+        cursor.execute(
+            """INSERT INTO leads 
+               (campaign_id, first_name, last_name, email, phone, company, job_title, source, status, notes, date_created) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (campaign_id, first_name, last_name, email, phone, company, job_title, source, status, notes, datetime.now().isoformat())
+        )
+        
+        conn.commit()
+        
+        # Get the new lead's ID
+        cursor.execute("SELECT last_insert_rowid()")
+        lead_id = cursor.fetchone()[0]
+        
+        return jsonify({
+            'message': 'Lead added successfully',
+            'lead': {
+                'id': lead_id,
+                'firstName': first_name,
+                'lastName': last_name,
+                'email': email,
+                'phone': phone,
+                'company': company,
+                'jobTitle': job_title,
+                'source': source,
+                'status': status,
+                'notes': notes,
+                'dateCreated': datetime.now().isoformat()
+            }
+        }), 201
+    finally:
+        conn.close()
+
+@app.route('/api/campaigns/<int:campaign_id>/leads/<int:lead_id>', methods=['PUT'])
+@token_required
+def update_lead(current_user, campaign_id, lead_id):
+    data = request.get_json()
     
-    # Get number of won bets
-    cursor.execute("SELECT COUNT(*) as won FROM bets WHERE user_id = ? AND status = 'won'", (current_user['id'],))
-    won_bets = cursor.fetchone()['won']
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Check if the campaign exists and belongs to the current user
+    cursor.execute("""
+        SELECT * FROM campaigns 
+        WHERE id = ? AND user_id = ?
+    """, (campaign_id, current_user['id']))
+    
+    campaign = cursor.fetchone()
+    if not campaign:
+        conn.close()
+        return jsonify({'message': 'Campaign not found'}), 404
+    
+    # Check if the lead exists and belongs to the campaign
+    cursor.execute("""
+        SELECT * FROM leads 
+        WHERE id = ? AND campaign_id = ?
+    """, (lead_id, campaign_id))
+    
+    lead = cursor.fetchone()
+    if not lead:
+        conn.close()
+        return jsonify({'message': 'Lead not found'}), 404
+    
+    first_name = data.get('firstName', lead['first_name'])
+    last_name = data.get('lastName', lead['last_name'])
+    email = data.get('email', lead['email'])
+    phone = data.get('phone', lead['phone'])
+    company = data.get('company', lead['company'])
+    job_title = data.get('jobTitle', lead['job_title'])
+    source = data.get('source', lead['source'])
+    status = data.get('status', lead['status'])
+    notes = data.get('notes', lead['notes'])
+    
+    try:
+        cursor.execute(
+            """UPDATE leads 
+               SET first_name = ?, last_name = ?, email = ?, phone = ?, company = ?, 
+                   job_title = ?, source = ?, status = ?, notes = ? 
+               WHERE id = ?""",
+            (first_name, last_name, email, phone, company, job_title, source, status, notes, lead_id)
+        )
+        
+        conn.commit()
+        
+        return jsonify({
+            'message': 'Lead updated successfully',
+            'lead': {
+                'id': lead_id,
+                'firstName': first_name,
+                'lastName': last_name,
+                'email': email,
+                'phone': phone,
+                'company': company,
+                'jobTitle': job_title,
+                'source': source,
+                'status': status,
+                'notes': notes,
+                'dateCreated': lead['date_created']
+            }
+        }), 200
+    finally:
+        conn.close()
+
+@app.route('/api/dashboardStats', methods=['GET'])
+@token_required
+def get_dashboard_stats(current_user):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get total number of campaigns
+    cursor.execute("SELECT COUNT(*) as total FROM campaigns WHERE user_id = ?", (current_user['id'],))
+    total_campaigns = cursor.fetchone()['total']
+    
+    # Get number of active campaigns
+    cursor.execute("SELECT COUNT(*) as active FROM campaigns WHERE user_id = ? AND status = 'active'", (current_user['id'],))
+    active_campaigns = cursor.fetchone()['active']
+    
+    # Get total number of leads
+    cursor.execute("""
+        SELECT COUNT(*) as total FROM leads 
+        JOIN campaigns ON leads.campaign_id = campaigns.id 
+        WHERE campaigns.user_id = ?
+    """, (current_user['id'],))
+    total_leads = cursor.fetchone()['total']
+    
+    # Get number of leads by status
+    cursor.execute("""
+        SELECT leads.status, COUNT(*) as count FROM leads 
+        JOIN campaigns ON leads.campaign_id = campaigns.id 
+        WHERE campaigns.user_id = ? 
+        GROUP BY leads.status
+    """, (current_user['id'],))
+    status_counts = cursor.fetchall()
+    
+    leads_by_status = {}
+    for status in status_counts:
+        leads_by_status[status['status']] = status['count']
+    
+    # Get recent leads
+    cursor.execute("""
+        SELECT leads.*, campaigns.name as campaign_name FROM leads 
+        JOIN campaigns ON leads.campaign_id = campaigns.id 
+        WHERE campaigns.user_id = ? 
+        ORDER BY leads.date_created DESC LIMIT 5
+    """, (current_user['id'],))
+    recent_leads_db = cursor.fetchall()
+    
+    recent_leads = []
+    for lead in recent_leads_db:
+        recent_leads.append({
+            'id': lead['id'],
+            'firstName': lead['first_name'],
+            'lastName': lead['last_name'],
+            'email': lead['email'],
+            'campaignName': lead['campaign_name'],
+            'status': lead['status'],
+            'dateCreated': lead['date_created']
+        })
     
     conn.close()
     
-    # Calculate net profit
-    net_profit = total_won - total_wagered
-    
-    # Calculate win rate
-    win_rate = (won_bets / total_bets * 100) if total_bets > 0 else 0
-    
     return jsonify({
-        'totalBets': total_bets,
-        'pendingBets': pending_bets,
-        'totalWagered': total_wagered,
-        'totalWon': total_won,
-        'netProfit': net_profit,
-        'winRate': win_rate
+        'totalCampaigns': total_campaigns,
+        'activeCampaigns': active_campaigns,
+        'totalLeads': total_leads,
+        'leadsByStatus': leads_by_status,
+        'recentLeads': recent_leads
     }), 200
 
-# Generate mock match data
+# Generate mock campaign data
 @app.route('/api/mock/generate', methods=['GET'])
 def generate_mock_data():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Clear existing match data
-    cursor.execute("DELETE FROM matches")
+    # Check if admin user exists
+    cursor.execute("SELECT id FROM users WHERE username = 'admin'")
+    admin = cursor.fetchone()
+    if not admin:
+        conn.close()
+        return jsonify({'message': 'Admin user not found'}), 404
     
-    # Sample sports and leagues
-    sports_leagues = {
-        'football': ['NFL', 'NCAA'],
-        'basketball': ['NBA', 'NCAA'],
-        'baseball': ['MLB'],
-        'hockey': ['NHL'],
-        'soccer': ['Premier League', 'La Liga', 'MLS']
-    }
+    admin_id = admin['id']
     
-    # Sample team names
-    teams = {
-        'football': {
-            'NFL': ['Chiefs', 'Eagles', 'Bills', '49ers', 'Cowboys', 'Ravens', 'Bengals', 'Lions'],
-            'NCAA': ['Alabama', 'Georgia', 'Ohio State', 'Michigan', 'Texas', 'Oregon', 'Florida State', 'Penn State']
+    # Sample campaign data
+    campaigns = [
+        {
+            'name': 'Summer Email Campaign',
+            'description': 'Email campaign targeting small business owners for our summer promotion',
+            'target_audience': 'Small business owners, 25-55 years old',
+            'status': 'active',
+            'budget': 5000
         },
-        'basketball': {
-            'NBA': ['Celtics', 'Nuggets', 'Bucks', 'Timberwolves', 'Lakers', 'Knicks', 'Thunder', 'Heat'],
-            'NCAA': ['UConn', 'Purdue', 'Houston', 'Tennessee', 'Arizona', 'Kansas', 'Duke', 'North Carolina']
+        {
+            'name': 'Social Media Lead Generation',
+            'description': 'Facebook and Instagram ads to generate leads for sales team',
+            'target_audience': 'Marketing professionals, 23-45 years old',
+            'status': 'active',
+            'budget': 3500
         },
-        'baseball': {
-            'MLB': ['Dodgers', 'Yankees', 'Braves', 'Phillies', 'Astros', 'Orioles', 'Rangers', 'Rays']
+        {
+            'name': 'Website Conversion Optimization',
+            'description': 'A/B testing and optimization for landing page conversions',
+            'target_audience': 'Website visitors, existing customers',
+            'status': 'draft',
+            'budget': 2000
         },
-        'hockey': {
-            'NHL': ['Bruins', 'Panthers', 'Rangers', 'Stars', 'Oilers', 'Hurricanes', 'Golden Knights', 'Avalanche']
-        },
-        'soccer': {
-            'Premier League': ['Man City', 'Arsenal', 'Liverpool', 'Man United', 'Chelsea', 'Newcastle', 'Tottenham', 'Brighton'],
-            'La Liga': ['Real Madrid', 'Barcelona', 'Atletico Madrid', 'Athletic Bilbao', 'Girona', 'Real Sociedad', 'Valencia', 'Villarreal'],
-            'MLS': ['Inter Miami', 'Cincinnati', 'Columbus', 'Orlando', 'LAFC', 'Seattle', 'Atlanta', 'LA Galaxy']
+        {
+            'name': 'Trade Show Lead Collection',
+            'description': 'Lead collection system for upcoming industry trade show',
+            'target_audience': 'Industry professionals, decision makers',
+            'status': 'planned',
+            'budget': 7500
         }
-    }
+    ]
     
-    # Generate matches for each sport and league
-    import random
+    # Sample lead sources
+    sources = ['Website', 'Social Media', 'Email', 'Referral', 'Trade Show', 'Cold Call', 'Webinar']
+    
+    # Sample lead statuses
+    statuses = ['new', 'contacted', 'qualified', 'converted', 'unqualified']
+    
+    # Sample companies
+    companies = ['Acme Inc.', 'Globex Corporation', 'Initech', 'Wayne Enterprises', 'Stark Industries', 
+                'Umbrella Corporation', 'Cyberdyne Systems', 'Aperture Science', 'Weyland-Yutani Corp']
+    
+    # Sample job titles
+    job_titles = ['CEO', 'CTO', 'CMO', 'Marketing Manager', 'VP Sales', 'Director of Operations', 
+                 'Business Development Manager', 'Product Manager', 'IT Director']
+    
     from datetime import timedelta
+    import random
     
-    match_id = 1
+    # Clear existing campaign and lead data for admin
+    cursor.execute("DELETE FROM leads WHERE campaign_id IN (SELECT id FROM campaigns WHERE user_id = ?)", (admin_id,))
+    cursor.execute("DELETE FROM campaigns WHERE user_id = ?", (admin_id,))
     
-    for sport, leagues in sports_leagues.items():
-        for league in leagues:
-            league_teams = teams[sport][league]
-            teams_copy = league_teams.copy()
+    # Insert campaigns
+    for idx, campaign in enumerate(campaigns):
+        start_date = (datetime.now() - timedelta(days=random.randint(5, 60))).isoformat()
+        end_date = (datetime.now() + timedelta(days=random.randint(30, 120))).isoformat() if campaign['status'] != 'completed' else None
+        
+        cursor.execute(
+            """INSERT INTO campaigns 
+               (user_id, name, description, target_audience, status, start_date, end_date, budget) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (admin_id, campaign['name'], campaign['description'], campaign['target_audience'], 
+             campaign['status'], start_date, end_date, campaign['budget'])
+        )
+        
+        # Get the new campaign's ID
+        cursor.execute("SELECT last_insert_rowid()")
+        campaign_id = cursor.fetchone()[0]
+        
+        # Generate leads for this campaign
+        for _ in range(random.randint(5, 20)):
+            first_name = f"FirstName{random.randint(1, 1000)}"
+            last_name = f"LastName{random.randint(1, 1000)}"
+            email = f"{first_name.lower()}.{last_name.lower()}@example.com"
+            phone = f"555-{random.randint(100, 999)}-{random.randint(1000, 9999)}"
+            company = random.choice(companies)
+            job_title = random.choice(job_titles)
+            source = random.choice(sources)
+            status = random.choice(statuses)
+            notes = "Sample lead notes" if random.random() > 0.7 else None
+            date_created = (datetime.now() - timedelta(days=random.randint(0, 30))).isoformat()
             
-            # Create matchups
-            for _ in range(4):  # 4 matches per league
-                if len(teams_copy) < 2:
-                    teams_copy = league_teams.copy()
-                
-                # Select two teams
-                home_team = random.choice(teams_copy)
-                teams_copy.remove(home_team)
-                away_team = random.choice(teams_copy)
-                teams_copy.remove(away_team)
-                
-                # Generate random start time (between now and 7 days from now)
-                hours_offset = random.randint(1, 7 * 24)
-                start_time = (datetime.now() + timedelta(hours=hours_offset)).isoformat()
-                
-                # Generate random odds
-                home_odds = round(random.uniform(1.5, 4.0), 2)
-                away_odds = round(random.uniform(1.5, 4.0), 2)
-                draw_odds = round(random.uniform(3.0, 8.0), 2) if sport == 'soccer' else None
-                
-                # Insert match into database
-                cursor.execute(
-                    """INSERT INTO matches 
-                       (id, home_team, away_team, sport, league, start_time, home_odds, away_odds, draw_odds, status) 
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (match_id, home_team, away_team, sport, league, start_time, home_odds, away_odds, draw_odds, 'scheduled')
-                )
-                
-                match_id += 1
+            cursor.execute(
+                """INSERT INTO leads 
+                   (campaign_id, first_name, last_name, email, phone, company, job_title, source, status, notes, date_created) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (campaign_id, first_name, last_name, email, phone, company, job_title, source, status, notes, date_created)
+            )
     
     conn.commit()
     conn.close()
     
-    return jsonify({'message': 'Mock match data generated successfully'}), 200
+    return jsonify({'message': 'Mock campaign and lead data generated successfully'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
